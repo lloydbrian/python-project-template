@@ -24,6 +24,7 @@ echo 'eval "$(mise activate zsh)"' >>~/.zshrc
 source ~/.zshrc
 brew install uv
 brew install pre-commit
+brew install trivy
 brew install --cask visual-studio-code --appdir=~/Applications
 brew doctor
 brew cleanup -s
