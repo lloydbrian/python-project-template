@@ -9,7 +9,7 @@
 v1 projects mixed pyenv, Make, pip, pip-tools and ad-hoc scripts. Python versions differed between laptops, containers and linters, and "run the checks" meant different things to different people.
 
 ## Decision
-- **mise** pins the toolchain per repo (`.mise.toml`: Python, uv, trivy) and defines every gate as a task. `mise run ci` is the single definition of done, used unchanged by CI (`jdx/mise-action`).
+- **mise** pins the toolchain per repo (`.mise.toml`: Python, uv, gitleaks, trivy) and defines every gate as a task. `mise run ci` (hooks, types, tests, security audit, full-history secret scan) is the single definition of done, used unchanged by CI (`jdx/mise-action`).
 - **uv** manages environments, resolution, the lockfile and installs. `uv.lock` is committed; everything automated uses `uv sync --locked`.
 - The Python version is one Copier answer feeding mise, `requires-python`, the base image and the ruff and mypy targets.
 
@@ -21,4 +21,4 @@ v1 projects mixed pyenv, Make, pip, pip-tools and ad-hoc scripts. Python version
 
 ## Consequences
 - Developers install mise and uv once (workstation guide); projects install everything else.
-- The uv version is pinned in three places that must agree (copier `uv_version`, the uv-pre-commit hook rev, the root `.mise.toml`); `check_pins.py` enforces the first two.
+- Tool versions are pinned in places that must agree: copier `uv_version`, `trivy_version` and `gitleaks_version`; the uv-pre-commit hook's `# frozen:` tag; the root `.mise.toml`; and the shared workflows' `mise-version` default. `check_pins.py` enforces all of them.

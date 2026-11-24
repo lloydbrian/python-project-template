@@ -22,9 +22,11 @@ An exception is allowed only when a finding cannot be fixed yet **and** the risk
    ```text
    CVE-2026-12345  # reason: <why not exploitable here>; owner: <person or team>; expires: YYYY-MM-DD
    ```
-   Keep the expiry short: 30–90 days.
+   Keep the expiry short: 30–90 days. More than 90 days ahead is rejected.
 4. **Review in the PR.** An exception needs a reviewer other than its author.
 5. **On expiry**, the scan fails (`tools/check_scan_exceptions.py`). Fix it, or renew with a fresh assessment and a new date.
+
+Do not add a `trivy.yaml` or VEX file to suppress findings: the checker rejects them, because they would bypass this process.
 
 Undocumented and expired entries fail the build; negative controls in template CI prove that.
 

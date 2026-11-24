@@ -56,6 +56,16 @@ def fake_token() -> str:
     return "ghp_" + "".join(random.choices(string.ascii_letters + string.digits, k=36))
 
 
+def commit_leak(p: Path) -> None:
+    (p / f"src/{PKG}/leak.py").write_text(f'TOKEN = "{fake_token()}"\n')
+    subprocess.run(
+        "git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm leak --no-verify",
+        shell=True,
+        cwd=p,
+        check=True,
+    )
+
+
 def add_untested_module(p: Path) -> None:
     body = "\n\n".join(
         f"def unused_{i}(x: int) -> int:\n    if x > {i}:\n        return x - {i}\n    return x + {i}"
@@ -74,9 +84,9 @@ CONTROLS = [
     ),
     Control(
         "secret-detection",
-        "gitleaks blocks committed tokens",
-        "gitleaks dir src --no-banner -l warn",
-        lambda p: (p / f"src/{PKG}/leak.py").write_text(f'TOKEN = "{fake_token()}"\n'),
+        "a token committed past the hook (--no-verify) fails the full-history scan in `mise run ci`",
+        "gitleaks git --redact --no-banner .",
+        commit_leak,
         marker="leaks found",
     ),
     Control(
@@ -182,6 +192,43 @@ CONTROLS = [
         marker="Found",
         network=True,
     ),
+    Control(
+        "image-build-context",
+        "a file the in-image tests need but the Containerfile never copies fails the build simulation",
+        f"python3 {ROOT}/scripts/image_sim.py .",
+        lambda p: edit(p / ".container/Containerfile", "COPY tools ./tools\n", ""),
+        marker="FileNotFoundError",
+    ),
+    Control(
+        "prod-api-docs",
+        "production does not serve /docs or /openapi.json",
+        'uv run pytest -q --no-cov -m "not live" tests/test_health.py',
+        lambda p: edit(p / f"src/{PKG}/main.py", 'docs = settings.app_env != "prod"', "docs = True"),
+        marker="test_api_docs_hidden_in_prod",
+    ),
+    Control(
+        "scan-exception-horizon",
+        "an exception dated more than 90 days ahead fails the scan pre-check",
+        "uv run python tools/check_scan_exceptions.py .trivyignore",
+        lambda p: (p / ".trivyignore").write_text("CVE-2020-0001  # reason: test; owner: qa; expires: 2099-01-01\n"),
+        marker="more than 90 days",
+    ),
+    Control(
+        "scan-config-bypass",
+        "a trivy.yaml (which trivy reads silently) fails the scan pre-check",
+        "uv run python tools/check_scan_exceptions.py .trivyignore",
+        lambda p: (p / "trivy.yaml").write_text("scan:\n  skip-dirs: [opt/venv]\n"),
+        marker="not allowed",
+    ),
+    Control(
+        "name-validator",
+        "a project name that would break TOML/Python is refused at question time",
+        "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"
+        " --data 'project_name=a\"b' --data description=ok . $(mktemp -d)/x",
+        lambda p: edit(p / "copier.yml", "{% elif '\"' in project_name", "{% elif false and '\"' in project_name"),
+        marker="",
+        where="template",
+    ),
 ]
 
 
@@ -193,7 +240,8 @@ def sh(cmd: str, cwd: Path) -> tuple[int, str]:
 
 
 def restore(where: Path) -> None:
-    subprocess.run("git checkout -q -- . && git clean -fdq", shell=True, cwd=where, check=True)
+    # reset --hard to the pristine commit also undoes controls that commit (secret-detection)
+    subprocess.run("git reset -q --hard pristine && git clean -fdq", shell=True, cwd=where, check=True)
     _rc, out = sh("git status --porcelain", where)
     if out.strip():
         raise SystemExit(f"restore failed in {where}:\n{out}")
@@ -210,13 +258,14 @@ def prepare(work: Path) -> tuple[Path, Path]:
     for cmd in (
         "git init -q && git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm render",
         f"UV_PYTHON={env_py} uv lock -q && UV_PYTHON={env_py} uv sync -q --locked",
-        "git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm lock",
+        "git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm lock && git tag pristine",
     ):
         subprocess.run(cmd, shell=True, cwd=render, check=True)
     template = work / "template-copy"
     shutil.copytree(ROOT, template, ignore=shutil.ignore_patterns(".git", ".render", ".venv", "__pycache__"))
     subprocess.run(
-        "git init -q && git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm copy",
+        "git init -q && git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm copy"
+        " && git tag pristine",
         shell=True,
         cwd=template,
         check=True,

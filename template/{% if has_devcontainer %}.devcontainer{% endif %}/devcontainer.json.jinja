@@ -1,10 +1,10 @@
 {
   "name": "{{ project_slug }}-dev",
   "build": { "dockerfile": "../.container/Containerfile", "context": "..", "target": "dev" },
-  "runArgs": ["--userns=keep-id"],
+  "runArgs": ["--userns=keep-id:uid=10001,gid=10001"],
   "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,Z",
   "workspaceFolder": "/app",
-  "postCreateCommand": "uv sync --locked{% if project_type == 'notebooks' %} --group notebooks{% endif %} && uv run pre-commit install",
+  "postCreateCommand": "uv sync --locked",
   "customizations": {
     "vscode": {
       "settings": { "python.defaultInterpreterPath": "/opt/venv/bin/python" },

@@ -14,15 +14,21 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Shared workflows `python-ci.yml` and `python-release.yml` called by generated projects at a pinned release (ADR 0009).
 - Releases without a registry: multi-arch OCI archives, CycloneDX SBOMs, build provenance, `SHA256SUMS` (ADR 0011).
 - Time-boxed `.trivyignore` exceptions validated by `tools/check_scan_exceptions.py` (ADR 0006).
-- Template CI: render matrix (5 variants), 14 negative controls, `copier update` test, pin policy, actionlint.
+- Template CI: render matrix (5 variants) with an image build-context simulation (`scripts/image_sim.py`), 19 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
 - ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
+- `mise run ci` includes pip-audit, bandit and a full-history gitleaks scan, so it equals what CI runs.
+- Copier validators reject names, descriptions and kernel names that would break TOML, Python or shell; the slug drops other characters.
 
 ### Changed
 - Workstation set-up consolidated into `workstation/README.md`; terminal config moved to `workstation/terminal/`. Dropped the `openssl readline zlib sqlite` build dependencies (mise installs prebuilt Python).
 - Node.js and Java/Maven mise baselines moved to `polyglot/`, updated to Node 24 LTS and Java 25 LTS, and the masked `|| true` removed from the Maven format task.
-- GitHub Actions pinned by commit SHA; image names fully qualified; Podman only (ADR 0003).
+- GitHub Actions and pre-commit hooks pinned by commit SHA; image names fully qualified; Podman only (ADR 0003).
+- Releases: attestation runs in its own job without project code, and is skipped on private repos; rc tags become pre-releases.
+- Scan exceptions limited to 90 days; `trivy.yaml`/VEX files refused.
+- Dev container and notebooks lab map the host user to `app`; `.git` is read-only in the lab; git hooks are installed on the host only.
+- Production services hide `/docs` and `/openapi.json`.
 
 ### Removed
 - `template-python-projects/` and `template-jupyterlab-projects/` (replaced by `template/`).

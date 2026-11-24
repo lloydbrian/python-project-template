@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render one template variant and run its gates, exactly as a new project would.
 
-    python3 scripts/render.py service                 # render into .render/service and run the gates
+    python3 scripts/render.py service                 # render (into <tmp>/...-render/service) and run its gates
     python3 scripts/render.py notebooks --no-gates    # render only
     REQUIRE_CONTAINER=1 python3 scripts/render.py service   # also build, scan and smoke-test the image
 
@@ -19,6 +19,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ VARIANTS: dict[str, dict[str, object]] = {
         "project_name": "Ref Library Box",
         "project_type": "library",
         "include_container": True,
+        "license": "MIT",  # exercises LICENSE in the image build context
     },
     "notebooks": {"project_name": "Ref Notebooks", "project_type": "notebooks"},
     "service-py313": {
@@ -88,6 +90,8 @@ def check_tree(variant: str, data: dict[str, object], out: Path) -> None:
     ptype = data["project_type"]
     has_container = ptype in ("service", "notebooks") or bool(data.get("include_container"))
     expected = list(ALWAYS) + (CONTAINER if has_container else [])
+    if data.get("license", "Proprietary") != "Proprietary":
+        expected.append("LICENSE")
     if ptype != "library" and has_container:
         expected.append(".container/compose.yaml")
     if ptype == "notebooks":
@@ -142,10 +146,13 @@ def gates(data: dict[str, object], out: Path, runner: str) -> None:
             'uv run pytest -q -m "not live"',
             "uv run --group security pip-audit",
             "uv run --group security bandit -q -r src",
+            "gitleaks git --redact --no-banner .",
         ):
             run(cmd, cwd=out, env=env)
     if not has_container:
         return
+    # Build-context check without a container engine: catches files the image needs but never copies.
+    run([sys.executable, str(ROOT / "scripts/image_sim.py"), str(out)], cwd=ROOT, env=env)
     if os.environ.get("REQUIRE_CONTAINER") != "1":
         print("  container stages skipped (set REQUIRE_CONTAINER=1 to build, scan and smoke-test)")
         return
@@ -157,11 +164,16 @@ def gates(data: dict[str, object], out: Path, runner: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("variant", choices=sorted(VARIANTS))
-    parser.add_argument("--out", type=Path, help="output folder (default .render/<variant>)")
+    parser.add_argument(
+        "--out", type=Path, help="output folder (default: <tmp>/python-project-template-render/<variant>)"
+    )
     parser.add_argument("--no-gates", action="store_true", help="render and check the tree only")
     parser.add_argument("--runner", choices=["mise", "direct"], default="mise")
     args = parser.parse_args()
-    out = (args.out or ROOT / ".render" / args.variant).resolve()
+    # Outside this repo on purpose: mise would otherwise merge the root .mise.toml into the
+    # rendered project, and the test would not prove the generated .mise.toml stands alone.
+    default = Path(tempfile.gettempdir()) / "python-project-template-render" / args.variant
+    out = (args.out or default).resolve()
     print(f"render-test {args.variant} -> {out}")
     data = render(args.variant, out)
     check_tree(args.variant, data, out)

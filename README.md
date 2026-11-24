@@ -35,9 +35,9 @@ The template removes those failure modes structurally rather than by asking peop
 
 | Problem seen in practice | What the template does about it |
 |---|---|
-| "Works on my machine", fails in CI | `mise run ci` is exactly what CI runs, so passing locally means passing in CI |
+| "Works on my machine", fails in CI | `mise run ci` (hooks, types, tests, security audit, full-history secret scan) is exactly what CI runs before image work, so passing locally means passing in CI |
 | Python 3.14 locally, 3.12 in the image, 3.11 in ruff/mypy | One answer (`python_version`) drives mise, `requires-python`, the base image and the ruff/mypy targets |
-| Unpinned installs that change under you | `uv.lock` committed; `uv sync --locked` everywhere; base images pinned by digest; CI actions pinned by commit SHA |
+| Unpinned installs that change under you | `uv.lock` committed; `uv sync --locked` everywhere; base images pinned by digest; CI actions and pre-commit hooks pinned by commit SHA |
 | Secrets committed or baked into images | `.env*` ignored except `.env.example`; gitleaks on every commit; secrets only at run time via `podman secret` |
 | Security checks that cannot fail (`pip-audit \|\| true`) | Every gate exits non-zero on findings, and negative controls prove each gate can fail |
 | Containers running as root, with full capabilities | Rootless Podman, non-root user, pip removed, read-only filesystem and all capabilities dropped for services |
@@ -54,10 +54,10 @@ The template removes those failure modes structurally rather than by asking peop
 
 ```bash
 copier copy --vcs-ref v2.0.0 gh:lloydbrian/python-project-template my-project
-cd my-project
-git init && git add -A && git commit -m "chore: scaffold from python-project-template v2.0.0"
-mise trust && mise install && mise run bootstrap
+cd my-project && git init         # git first: bootstrap installs the git hooks
+mise trust && mise install && mise run bootstrap      # creates uv.lock, which CI needs committed
 cp .env.example .env.dev          # fill values locally; never committed
+git add -A && git commit -m "chore: scaffold from python-project-template v2.0.0"
 mise run ci                       # everything CI checks, locally
 ```
 
@@ -99,8 +99,8 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | Question | Asked when | Default | What it controls |
 |---|---|---|---|
 | `project_type` | always | `service` | Which files, dependencies, tasks and CI steps are generated |
-| `project_name` | always | (required) | Human-readable name: README title, API title, kernel name |
-| `project_slug` | always | from the name, e.g. `ticket-triage` | Repo, distribution, CLI command and image name. Lowercase letters, digits, hyphens |
+| `project_name` | always | (required) | Human-readable name: README title, API title, kernel name. No double quotes, backslashes or line breaks (it is written into TOML and Python) |
+| `project_slug` | always | from the name, e.g. `ticket-triage` (other characters dropped) | Repo, distribution, CLI command and image name. Lowercase letters, digits and single hyphens; starts with a letter; no trailing hyphen |
 | `package_name` | always | slug with `_`, e.g. `ticket_triage` | Python import package under `src/` |
 | `description` | always | the project name | `pyproject.toml` and README |
 | `author_name` | always | `Lloyd D.` | `pyproject.toml` authors |
@@ -111,11 +111,11 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | `http_port` | service | `8000` | Port used by uvicorn, compose, smoke test and `.env.example`. Must be ≥1024 (rootless Podman cannot bind lower) |
 | `include_container` | library | `false` | Adds the Containerfile, scanning, SBOM and image CI to a library (for CLIs you ship as images) |
 | `include_devcontainer` | when there is a container | `true` | VS Code dev container on Podman |
-| `kernel_display_name` | notebooks | `Python (<slug>)` | Jupyter kernel label |
+| `kernel_display_name` | notebooks | `Python (<slug>)` | Jupyter kernel label. No quotes or backslashes (passed through the shell) |
 
-Validation runs at question time: a slug with capitals or a port below 1024 is rejected before any file is written.
+Validation runs at question time: a slug with capitals, a name with a double quote or a port below 1024 is rejected before any file is written.
 
-**Computed values** are never asked and never saved. They are recalculated on every `copier update`: the template release (`template_ref`), tool versions (uv, trivy, mise) and base-image digests. This is how version bumps reach existing projects without anyone re-answering questions.
+**Computed values** are never asked and never saved. They are recalculated on every `copier update`: the template release (`template_ref`), tool versions (uv, trivy, gitleaks, mise) and base-image digests. This is how version bumps reach existing projects without anyone re-answering questions.
 
 ---
 
@@ -124,12 +124,12 @@ Validation runs at question time: a slug with capitals or a port below 1024 is r
 ```text
 my-project/
 ├── .copier-answers.yml         answers + template version (drives copier update)
-├── .mise.toml                  pinned Python/uv(/trivy) + every task
+├── .mise.toml                  pinned Python, uv, gitleaks (+ trivy) + every task
 ├── pyproject.toml  uv.lock     metadata, deps, dependency groups, ruff/mypy/pytest/coverage config
-├── .pre-commit-config.yaml     hygiene, uv-lock, ruff, gitleaks (+ nbstripout/nbQA for notebooks)
+├── .pre-commit-config.yaml     hygiene, uv-lock, ruff, gitleaks (+ nbstripout/nbQA), SHA-pinned
 ├── .gitignore  .env.example    hardened ignores; variable names only
 ├── .vscode/settings.json       per-repo interpreter + format on save
-├── .github/workflows/ci.yml    5-line caller of the shared, pinned CI workflow
+├── .github/workflows/ci.yml    short caller of the shared, pinned CI workflow
 ├── src/<package>/  tests/      src layout, strict types, tests that pass from day one
 ├── docs/adr/  CHANGELOG.md     the project's own decision log and change history
 ├── README.md                   full developer reference for THIS project
@@ -137,7 +137,7 @@ my-project/
     ├── .container/Containerfile    python-base → build → dev / test / prod|lab
     ├── .container/compose.yaml     hardened local run (service) or JupyterLab (notebooks)
     ├── .containerignore  .trivyignore  tools/check_scan_exceptions.py
-    ├── .devcontainer/devcontainer.json   (optional) Podman, --userns=keep-id
+    ├── .devcontainer/devcontainer.json   (optional) Podman, keep-id mapped to the image user
     └── .github/workflows/release.yml     tag → multi-arch OCI archives + SBOM + provenance
 ```
 
@@ -157,7 +157,7 @@ The generated README has the full table, with alternatives considered. In short:
 | **ruff** | Lint + format | One fast tool replacing flake8, isort, pyupgrade and black |
 | **mypy --strict** | Types | Catches `None` and `Any` leaks early; pydantic plugin for services |
 | **pytest + coverage** | Tests | Hard coverage floor with branch coverage |
-| **pre-commit + gitleaks** | Commit-time checks | Problems and secrets stopped before they reach a PR |
+| **pre-commit + gitleaks** | Commit-time and CI checks | Problems and secrets stopped before they reach a PR; the full-history scan in CI catches anything committed past the hook |
 | **pip-audit + bandit** | Security | Dependency CVEs and insecure code patterns |
 | **Podman** | Containers | Rootless and daemonless; the team standard ([ADR 0003](docs/adr/0003-podman-only.md)) |
 | **trivy** | Image scan + SBOM | One tool for both; scans exported archives, so no daemon socket is needed ([ADR 0006](docs/adr/0006-vulnerability-scan-policy.md)) |
@@ -193,14 +193,15 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Lint / format | `ruff check`, `ruff format` | Any finding (rules E F I B UP SIM N S RUF) |
 | Types | `mypy --strict` | Any type error |
 | Tests | `pytest --cov` | A failing test, or coverage below `coverage_threshold` |
-| Secrets | `gitleaks` | A token, key or password in a commit |
+| Secrets | `gitleaks` hook (staged) + `gitleaks git` in `mise run ci` (full history) | A token, key or password in any commit, including ones made with `--no-verify` |
 | Dependencies | `pip-audit` | A dependency with a published CVE |
 | Code security | `bandit` | Insecure patterns in `src/` |
+| Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is never copied by the Containerfile |
 | Image tests | `podman build --target test` | Tests fail inside the image |
-| Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL, or an expired or undocumented exception |
+| Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`/VEX file that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 14 controls: env-file ignore, secret detection, coverage floor, settings validation, request-ID sanitising, health contract, lint, types, lockfile drift, expired and undocumented scan exceptions, image and action pin policy, and dependency audit. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 19 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, a trivy config bypass, image and action pin policy, and the project-name validator. A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -211,15 +212,18 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Engine | **Podman, rootless** | No root daemon; a container escape lands as an unprivileged user |
 | Image names | **Fully qualified** (`docker.io/library/python`) | Podman does not guess registries; no short-name ambiguity |
 | Base | `python:<ver>-slim` **pinned by multi-arch digest**, `apt-get upgrade` at build | A tag can move, a digest cannot; patches applied even between base releases |
+| Dev tools | git only in the `dev` stage; venv owned by `app`, never world-writable | Runtime stages stay minimal |
 | Package tools | **pip removed** from the image; uv only in the build stage | pip ships vendored copies of urllib3/setuptools that scanners flag, and is not needed at run time |
 | Install | `uv sync --locked --no-dev --no-editable` into `/opt/venv` | Exactly the locked runtime deps; no source tree in prod; venv outside the mount point |
 | Layers | `UV_NO_CACHE=1`, `.containerignore` | No caches, `.git`, `.venv` or secrets in layers |
-| User | **uid 10001 `app`** in every runtime stage | Non-root inside the container too |
-| Run (service) | `read_only`, `tmpfs /tmp`, `cap_drop: ALL`, `no-new-privileges`, port bound to `127.0.0.1` | Least privilege; the smoke test proves the app works under these constraints |
+| User | **uid 10001 `app`** in every runtime stage, and for the in-image tests | Non-root inside the container too |
+| Run (service) | `read_only`, `tmpfs /tmp`, `cap_drop: ALL`, `no-new-privileges`, port bound to `127.0.0.1` | Least privilege; the smoke test runs the image under these same constraints |
+| API surface | `/docs`, `/redoc`, `/openapi.json` off when `APP_ENV=prod` | Production does not advertise its full API |
+| Notebooks lab | keep-id user mapping, `.git` mounted read-only, port on `127.0.0.1`, token auth on | Kernel code cannot plant git hooks that run on the host |
 | Health | Python-based healthcheck | The image deliberately has no curl or wget |
 | Scan | trivy: fixable HIGH/CRITICAL fail; exceptions time-boxed with reason, owner and expiry | Accepted risk is re-reviewed instead of living forever |
 | Inventory | CycloneDX SBOM per build and release | Know exactly what shipped |
-| Provenance | GitHub artifact attestations on release archives | Prove where and how an image was built (`gh attestation verify`) |
+| Provenance | GitHub artifact attestations on release archives and SBOMs, signed by a job that runs no project code | Prove where and how an image was built (`gh attestation verify`). Public repos, or private on Enterprise Cloud |
 | Secrets | `podman secret` at run time; never `ENV` or `COPY` | Nothing secret in any layer |
 
 ---
@@ -230,20 +234,23 @@ Every generated project ships with these gates, and every gate exits non-zero on
  generated project                          this repo (python-project-template)
  ─────────────────                          ───────────────────────────────────
  .github/workflows/ci.yml  ── uses ──▶  .github/workflows/python-ci.yml@v2.0.0
-   with: image, smoke, mise-version          checkout → mise install → mise run ci
-                                             → mise run security → podman build --target test
-                                             → image → scan → sbom → smoke → upload SBOM
+   with: image, smoke, mise-version          checkout (full history) → mise install → mise run ci
+                                             (hooks, types, tests, security, history secret scan)
+                                             → podman build --target test → image → scan → sbom
+                                             → smoke → upload SBOM
 
  .github/workflows/release.yml ─ uses ─▶ .github/workflows/python-release.yml@v2.0.0
-   on: tag vX.Y.Z                            per-arch native runners (amd64, arm64)
-                                             → gates → build → OCI archive → scan → SBOM
-                                             → attest provenance → GitHub release
+   on: tag vX.Y.Z                            build job, per arch (amd64, arm64), read-only token:
+                                             gates → test stage → image → OCI archive → scan → SBOM
+                                             attest job (no project code, id-token): provenance
+                                             publish job: SHA256SUMS → GitHub release
 
                                          .github/workflows/template-ci.yml   (this repo's own CI)
                                              lint (hooks, actionlint, pins, nothing ignored)
                                              render matrix: service, library, library-container,
                                                notebooks, service-py313 (each runs its own gates,
-                                               image build, scan and smoke with REQUIRE_CONTAINER=1)
+                                               the image-context simulation, and with
+                                               REQUIRE_CONTAINER=1 image build, scan and smoke)
                                              negative controls · copier update test
 
                                          .github/workflows/release.yml       (releases the template)
@@ -252,8 +259,9 @@ Every generated project ships with these gates, and every gate exits non-zero on
 ```
 
 - **Pinned by release tag.** A project's CI changes only when the project runs `copier update` and the new `template_ref` lands in its `ci.yml`. A template change can never break a project's CI unannounced.
-- **Actions pinned by commit SHA**, with the version tag in a comment. `scripts/check_pins.py` enforces this in the lint job.
-- **Least-privilege tokens**: `contents: read` by default. Only the release jobs get `contents: write`, `id-token: write` and `attestations: write`.
+- **Actions and pre-commit hooks pinned by commit SHA**, with the version tag in a comment. `scripts/check_pins.py` enforces this in the lint job.
+- **Projects call the shared workflows by release tag** (`@v2.0.0`), because Copier can only render the tag. Protect `v*` tags in this repo with a ruleset that blocks updates and deletion, so a tag cannot be moved to different code (runbook step 6).
+- **Least-privilege tokens**: `contents: read` by default. Only the `attest` job gets `id-token: write` and `attestations: write`, and it runs none of the project's code; only `publish` gets `contents: write`.
 - **Branch protection**: require the check **`check / check`** (caller job `check` → reusable job `check`).
 - **Private template repo**: projects can only call its workflows if *Settings → Actions → General → Access* allows repositories owned by the same user.
 
@@ -266,7 +274,7 @@ Decided 2026-11-23 ([ADR 0011](docs/adr/0011-release-artifacts-without-registry.
 - `<name>-<version>-linux-amd64.oci.tar` and `...-linux-arm64.oci.tar`, built on native runners
 - one CycloneDX SBOM per architecture
 - `SHA256SUMS`
-- a build-provenance attestation for each archive
+- a build-provenance attestation for each archive and SBOM (public repos; GitHub supports attestations on private repos only with Enterprise Cloud, so private repos skip this step)
 
 ```bash
 gh release download v0.1.0 -R owner/project
@@ -275,7 +283,7 @@ gh attestation verify ticket-triage-0.1.0-linux-arm64.oci.tar -R owner/project
 podman load -i ticket-triage-0.1.0-linux-arm64.oci.tar
 ```
 
-Release a project by setting `version` in `pyproject.toml`, then tagging `v<version>`. The workflow refuses a tag that does not match.
+Release a project by setting `version` in `pyproject.toml`, then tagging `v<version>`. The workflow refuses a tag that does not match (compared as PEP 440 versions, so `v0.2.0-rc.1` matches `0.2.0rc1` and is published as a pre-release).
 
 ---
 
@@ -299,7 +307,7 @@ Read this repo's [CHANGELOG](CHANGELOG.md) first when crossing a major version. 
 ```bash
 mise trust && mise install
 mise run render-test -- service        # fast loop: render one variant and run its gates
-mise run template-ci                   # everything CI runs: lint, all variants, controls, update test
+mise run template-ci                   # lint, all variants, controls, update test (add REQUIRE_CONTAINER=1 for full CI parity)
 REQUIRE_CONTAINER=1 mise run render-test -- service   # include image build, scan and smoke (needs Podman)
 ```
 
@@ -308,16 +316,16 @@ REQUIRE_CONTAINER=1 mise run render-test -- service   # include image build, sca
 1. Edit `template/` or `copier.yml`. Keep the "why" next to the change: a comment in the file, a row in the generated README, or an ADR for a real decision.
 2. A new question needs a `help` text, a validator if free-form, and a `when` if it only applies to some variants. Add a row to [the questions table](#the-questions-copier-asks).
 3. A new rule needs a negative control in `scripts/negative_controls.py`.
-4. A new or moved file must be added to the expected-file lists in `scripts/render.py`.
+4. A new or moved file must be added to the expected-file lists in `scripts/render.py`. If the image build or in-image tests need it, the Containerfile must `COPY` it; `scripts/image_sim.py` fails otherwise.
 5. Add a `CHANGELOG.md` entry under *Unreleased*.
 
 **Releasing** (operator):
 
-1. Set `template_ref` in `copier.yml` to the new tag (for example `v2.1.0`). Bump `uv_version`, `trivy_version` and `mise_version` if wanted, together with the matching hook `rev`s and workflow defaults (`mise run pins` checks they agree).
+1. Set `template_ref` in `copier.yml` to **the tag you are about to push**: first the release candidate (`v2.1.0-rc.1`). The release gate requires them to be equal, and projects generated from the rc call `python-ci.yml@v2.1.0-rc.1`, which exists. To bump tools, change `uv_version`, `trivy_version`, `gitleaks_version` and `mise_version` together with the hook `rev`s (SHA + `# frozen:` tag), the shared workflows' `mise-version` default and the root `.mise.toml`. `mise run pins` checks that they agree.
 2. `mise run pin-images` (dry run), then `mise run pin-images -- --write`. Review `git diff copier.yml`.
 3. `mise run template-ci`, then move the *Unreleased* changelog section under the new version.
-4. Merge to `main`. Tag a release candidate first: `git tag v2.1.0-rc.1 && git push origin v2.1.0-rc.1`. `release.yml` verifies pins, runs template CI and creates a pre-release.
-5. Generate the reference app (`template-repo`) from the rc and check it. Then tag `v2.1.0` (with `template_ref: v2.1.0`).
+4. Merge to `main`, then tag the rc: `git tag v2.1.0-rc.1 && git push origin v2.1.0-rc.1`. `release.yml` verifies pins, runs template CI and creates a pre-release.
+5. Update the reference app (`template-repo`) to the rc and check its CI and a test release. Then set `template_ref: v2.1.0`, merge, and tag `v2.1.0`.
 
 There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). Review tool, action and base-image versions monthly and after security advisories.
 
@@ -337,6 +345,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 | Slow builds or `exec format error` on Apple silicon | Build for your own architecture (the default). CI covers the other one natively |
 | Project CI: "workflow was not found" | The `template_ref` tag does not exist yet, or the template repo is private without access granted |
 | Release job fails "sha256:PENDING" | Run `mise run pin-images -- --write` and commit before tagging |
+| Release `verify` fails "template_ref is ... but the tag is ..." | Set `template_ref` in `copier.yml` to exactly the tag you push (rc tags included), commit, re-tag |
 
 ---
 
@@ -353,7 +362,8 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 │   ├── workflows/release.yml          releases the template on a version tag
 │   └── CODEOWNERS
 ├── scripts/
-│   ├── render.py                 render a variant and run its gates
+│   ├── render.py                 render a variant (outside this repo) and run its gates
+│   ├── image_sim.py              build-context check of the Containerfile without a container engine
 │   ├── negative_controls.py      prove every gate can fail
 │   ├── update_test.py            prove copier update works
 │   ├── check_pins.py             SHA-pinned actions, tagged images, version agreement, release checks
@@ -401,7 +411,8 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 14 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | 19 negative controls in template CI |
+| Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 24 LTS, Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |
 

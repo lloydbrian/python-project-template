@@ -12,7 +12,7 @@ The team moved from Docker to Podman. Projects generated from this template must
 - Build and run with **Podman, rootless**. Files are `.container/Containerfile` and `.containerignore`.
 - Image names are **fully qualified** (`docker.io/library/python`, `ghcr.io/astral-sh/uv`), because Podman does not resolve short names by default.
 - Local multi-container runs use `podman compose` (podman-compose provider).
-- The dev container sets `--userns=keep-id` and a `:Z` workspace mount; VS Code is pointed at Podman with `dev.containers.dockerPath`.
+- The dev container and the notebooks lab service map the host user to the image user (`keep-id:uid=10001,gid=10001`) with a `:Z` mount, so files stay owned by the developer; VS Code is pointed at Podman with `dev.containers.dockerPath`.
 - Scans run on exported archives (`podman save` → `trivy image --input`), so no Docker socket is needed.
 - CI uses the Podman preinstalled on GitHub's Ubuntu runners; the release workflow installs it if a runner image lacks it.
 - Host ports are ≥1024 (rootless limitation); the `http_port` question enforces it.

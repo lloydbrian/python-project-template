@@ -16,6 +16,7 @@ mise tasks                          # list maintainer tasks
 2. Edit `template/` and/or `copier.yml`. Template files end in `.jinja`; anything else is copied verbatim.
 3. Iterate with the fast gate: `mise run render-test -- service` (or the variant you touched).
 4. For each new rule or gate, add a negative control in `scripts/negative_controls.py` that breaks it and names the check that must fail.
+   If the image needs a new file, `COPY` it in the Containerfile: `scripts/image_sim.py` (run by every render test) fails otherwise.
 5. Keep the reasoning with the change. Comment non-obvious lines in the template. Update the generated README (`template/README.md.jinja`) when behaviour or a task changes. Add an ADR in `docs/adr/` for a real decision.
 6. Add an entry under **Unreleased** in `CHANGELOG.md`.
 7. Run the full gate before opening a PR: `mise run template-ci`. Add `REQUIRE_CONTAINER=1 mise run render-test -- service` if you touched the Containerfile, compose, the smoke task or the workflows.

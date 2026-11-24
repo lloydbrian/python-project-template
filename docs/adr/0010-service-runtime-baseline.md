@@ -16,6 +16,13 @@ The `service` variant starts with:
 - JSON logging with the request ID (`LOG_JSON=false` for local readability).
 - `pydantic-settings` with `Literal` and range-checked fields that fail at start-up; real environment variables win over `.env.<APP_ENV>`; secrets declared as `SecretStr`.
 
+- API docs (`/docs`, `/redoc`, `/openapi.json`) only outside `prod`.
+
+## Alternatives considered
+- *Add health, logging and settings per project* (v1): each project solved it differently, often after an incident.
+- *A single `/health` endpoint*: conflates "restart me" with "stop sending traffic"; a slow dependency then causes restart loops.
+- *uvicorn's access log*: has no request ID, so a request cannot be traced across log lines.
+
 ## Consequences
 - Each behaviour has a test, and negative controls prove the settings validation, request-ID sanitising and health contract tests catch regressions.
-- The smoke test runs the image read-only with all capabilities dropped and checks both endpoints and the request-ID echo.
+- The smoke test runs the image read-only (tmpfs `/tmp`), with all capabilities dropped and no privilege escalation, and checks both endpoints and the request-ID echo.

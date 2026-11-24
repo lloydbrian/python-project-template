@@ -72,6 +72,12 @@ security = ["pip-audit>=2.7", "bandit>=1.8"]
 notebooks = ["nbqa>=1.10", "nbstripout>=0.9", "jupyterlab-git>=0.50"]
 {%- endif %}
 
+{%- if project_type == "notebooks" %}
+
+[tool.uv]
+default-groups = ["dev", "notebooks"]   # plain `uv sync` (and `uv sync --locked` in CI) keeps notebook tooling
+{%- endif %}
+
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"

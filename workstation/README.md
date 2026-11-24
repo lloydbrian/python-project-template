@@ -10,6 +10,7 @@ Everything a developer needs before generating or cloning a project from **pytho
 brew update && brew upgrade && brew cleanup -s && brew doctor
 brew install mise uv git gh podman podman-compose
 brew install ripgrep fd fzf jq bat tree coreutils gnu-sed        # optional, but used in our docs
+brew install skopeo                                              # template maintainers only: `mise run pin-images`
 brew install --cask visual-studio-code --appdir=~/Applications
 echo 'eval "$(mise activate zsh)"' >> ~/.zshrc && source ~/.zshrc
 uv tool install copier                                           # generates and updates projects
@@ -25,6 +26,7 @@ uv tool install copier                                           # generates and
 | `podman-compose` | The provider that `podman compose` uses to run `compose.yaml` files |
 | `rg`, `fd`, `fzf`, `jq`, `bat`, `tree` | Search code, find files, fuzzy-pick, filter JSON, read files with highlighting, view folder trees |
 | `coreutils`, `gnu-sed` | GNU versions of `sed` and friends, so scripts behave the same on macOS and Linux |
+| `skopeo` (maintainers) | Reads image manifests from registries without pulling, to pin base images by digest |
 
 **Not installed globally, on purpose:**
 
@@ -82,12 +84,19 @@ git config --global core.excludesFile ~/.config/git/ignore
 ```bash
 brew install zsh-autosuggestions zsh-syntax-highlighting starship
 brew install --cask font-jetbrains-mono-nerd-font iterm2 --appdir=~/Applications
+gh repo clone lloydbrian/python-project-template ~/Developer/repositories/python-project-template
+cd ~/Developer/repositories/python-project-template
 mkdir -p ~/.config
 cp workstation/terminal/starship.toml ~/.config/starship.toml          # or starship-custom.toml
-cat workstation/terminal/starship_zsh_integration.zsh >> ~/.zshrc && source ~/.zshrc
+cat workstation/terminal/starship_zsh_integration.zsh >> ~/.zshrc
+cat >> ~/.zshrc <<'ZSH'
+source "$(brew --prefix)/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+source "$(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"   # keep last
+ZSH
+source ~/.zshrc
 ```
 
-Set the terminal font to **JetBrainsMono Nerd Font** (Terminal.app: *Settings → Profiles → Font*; iTerm2: *Profiles → Text*). The Starship prompt shows the active Python, the git branch and the mise environment, which helps catch "wrong interpreter" mistakes early.
+Set the terminal font to **JetBrainsMono Nerd Font** (Terminal.app: *Settings → Profiles → Font*; iTerm2: *Profiles → Text*). The Starship prompt shows the active Python and virtual environment and the git branch, which helps catch "wrong interpreter" mistakes early.
 
 ## 6. Verify
 

@@ -27,6 +27,7 @@
 {%- if has_container %}
 [Containers](#containers-podman) ·
 [Vulnerabilities](#vulnerability-scanning-and-exceptions) ·
+[Releasing](#releasing) ·
 {%- endif %}
 [CI](#continuous-integration) ·
 [Dependencies](#dependencies) ·
@@ -37,13 +38,13 @@
 
 ## Quick start
 
-**Once per machine:** follow the workstation set-up in the template repo (`workstation/README.md` in `{{ github_owner }}/python-project-template`). It installs mise, uv, pre-commit{% if has_container %}, Podman (and its machine on macOS){% endif %} and the editor extensions.
+**Once per machine:** follow the workstation set-up in the template repo (`workstation/README.md` in `{{ github_owner }}/python-project-template`). It installs mise, uv, Copier{% if has_container %}, Podman (and its machine on macOS){% endif %} and the editor extensions. Everything else (pre-commit, ruff, mypy, pytest) comes from this project's locked dev dependencies.
 
 **Once per clone:**
 
 ```bash
 mise trust                  # allow this repo's .mise.toml to run (mise refuses untrusted config)
-mise install                # installs the pinned Python {{ python_version }}, uv{% if has_container %} and trivy{% endif %}
+mise install                # installs the pinned Python {{ python_version }}, uv, gitleaks{% if has_container %} and trivy{% endif %}
 mise run bootstrap          # creates .venv, locks if needed, installs deps and the git hooks
 cp .env.example .env.dev    # fill values locally; .env.dev is git-ignored
 mise run ci                 # the same checks CI runs; must pass before you push
@@ -53,10 +54,12 @@ mise run ci                 # the same checks CI runs; must pass before you push
 Then register the kernel once so JupyterLab and VS Code use this repo's environment: `mise run kernel`.
 {%- endif %}
 
-**First commit** (if Copier created a fresh folder):
+**Brand-new project** (Copier just created the folder). The order matters: `git init` first, so bootstrap can install the git hooks; bootstrap before the first commit, because it creates `uv.lock`, which CI and the image build need:
 
 ```bash
-git init && git add -A
+git init
+mise trust && mise install && mise run bootstrap
+git add -A
 git commit -m "chore: scaffold from python-project-template {{ template_ref }}"
 ```
 
@@ -70,7 +73,7 @@ Each part of this scaffold is here to prevent a specific, recurring failure:
 
 | Principle | The failure it prevents | How the scaffold enforces it |
 |---|---|---|
-| **One command is the definition of "done"** | "Passes on my machine" but fails in CI, because people run different subsets of checks | `mise run ci` is byte-for-byte what CI runs before any image work |
+| **One command is the definition of "done"** | "Passes on my machine" but fails in CI, because people run different subsets of checks | `mise run ci` (hooks, types, tests, security audit, full-history secret scan) is exactly what CI runs before any image work |
 | **One Python version, declared once** | Code passes locally on 3.14 and fails in a 3.12 container, or ruff/mypy check for the wrong version | The Copier answer `python_version` feeds mise, `requires-python`, the base image and the ruff/mypy targets |
 | **Reproducible installs** | A teammate or CI resolves a newer transitive dependency and something breaks | `uv.lock` is committed; CI, images and the dev container all use `uv sync --locked` |
 | **Secrets never enter git or images** | Keys committed by accident or baked into a layer | `.env*` ignored (except `.env.example`), gitleaks on every commit, secrets supplied at run time |
@@ -92,7 +95,7 @@ The reasoning behind each decision is recorded as ADRs in the template repo (`do
 | **mypy** (strict) | Static type checking | Mature, strict mode catches `None` and `Any` leaks{% if svc %}; the pydantic plugin understands settings models{% endif %} | pyright (fine in the editor via Pylance; mypy stays the CI gate for plugin support) |
 | **pytest** + pytest-cov | Tests with a coverage floor | De-facto standard; fixtures; `--strict-markers` stops typo'd markers silently skipping tests | unittest (verbose, no fixtures) |
 | **pre-commit** | Runs format, lint, lockfile and secret checks on every commit | Catches problems before they reach a PR; the same hooks run in CI via `pre-commit run --all-files` | Husky (Node-centric), manual discipline |
-| **gitleaks** | Secret scanning in pre-commit | Fast, broad rule set, no service to call | detect-secrets (baseline file to maintain) |
+| **gitleaks** | Secret scanning: staged changes on commit (hook) and the full git history in `mise run ci` | Fast, broad rule set, no service to call. The history scan catches anything committed past the hook (`--no-verify`, web edits) | detect-secrets (baseline file to maintain) |
 | **pip-audit** + **bandit** | Dependency CVEs and insecure code patterns (`mise run security`) | Uses the PyPA advisory database; bandit flags `eval`, weak crypto, shell injection | Safety (licensed DB) |
 {%- if has_container %}
 | **Podman** | Build and run images, rootless and daemonless | No root daemon; rootless by default; Docker-compatible CLI; the team standard (Docker is not used) | Docker Desktop (root daemon, licensing) |
@@ -122,26 +125,26 @@ Run `mise tasks` to list them. Every task exits non-zero on failure, so it can g
 
 | Task | What it does | When to run it |
 |---|---|---|
-| `mise run bootstrap` | `uv lock` if there is no lockfile, `uv sync`{% if nb %} (with the notebooks group){% endif %}, install git hooks | Once per clone, and after `copier update` |
+| `mise run bootstrap` | `uv lock` if there is no lockfile, `uv sync`{% if nb %} (dev and notebooks groups, the defaults here){% endif %}, install git hooks | Once per clone, and after `copier update` |
 | `mise run format` | `ruff format .` | Any time (also runs on commit) |
 | `mise run lint` | `ruff check .` | While coding |
 | `mise run type` | `mypy` in strict mode | While coding |
 | `mise run test` | `pytest` with coverage; fails under {{ coverage_threshold }}% | While coding |
 | `mise run security` | `pip-audit` (dependency CVEs) and `bandit` (code patterns) | Before a release, and when adding dependencies |
 {%- if has_container %}
-| `mise run image` | `podman build --pull=newer --target {% if nb %}lab{% else %}prod{% endif %}` → `{{ project_slug }}:dev` | Before scanning or smoke-testing |
+| `mise run image` | `podman build --pull=newer --target {% if nb %}lab{% else %}prod{% endif %}` → `{{ project_slug }}:dev` | Before scanning{% if svc %} or smoke-testing{% endif %} |
 | `mise run scan` | Validate `.trivyignore`, then trivy on the image; fails on fixable HIGH/CRITICAL | After `image` |
 | `mise run sbom` | CycloneDX SBOM of the image → `sbom.cdx.json` (git-ignored) | When you need an inventory |
 {%- endif %}
 {%- if svc %}
 | `mise run serve` | Run the API locally with auto-reload on `http://127.0.0.1:{{ http_port }}` | Local development |
-| `mise run smoke` | Run the built image rootless, read-only, no capabilities; check `/health/live`, `/health/ready` and request-ID echo | After `image` |
+| `mise run smoke` | Run the built image rootless, read-only (tmpfs `/tmp`), no capabilities, no privilege escalation; check `/health/live`, `/health/ready` and request-ID echo; print the container log if it fails | After `image` |
 {%- endif %}
 {%- if nb %}
 | `mise run lab` | Start JupyterLab on this repo's environment | Exploration |
 | `mise run kernel` | Register the `{{ kernel_display_name }}` kernel | Once per machine |
 {%- endif %}
-| `mise run ci` | `uv sync --locked`, all pre-commit hooks, mypy, tests (excluding `live`) | **Before every push** |
+| `mise run ci` | `uv sync --locked`, all pre-commit hooks, mypy, tests (excluding `live`), pip-audit, bandit, gitleaks over the full history | **Before every push**: CI runs exactly this |
 
 ---
 
@@ -166,7 +169,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 ├── .copier-answers.yml    your template answers (do not edit by hand; used by copier update)
 {%- if has_container %}
 ├── .container/
-│   ├── Containerfile      multi-stage: python-base → build → dev / test / {% if nb %}lab{% else %}prod{% endif %}
+│   {% if lib %}└──{% else %}├──{% endif %} Containerfile      multi-stage: python-base → build → dev / test / {% if nb %}lab{% else %}prod{% endif %}
 {%- if not lib %}
 │   └── compose.yaml       {% if svc %}hardened local run of the prod image{% else %}JupyterLab on 127.0.0.1:8888{% endif %}
 {%- endif %}
@@ -175,8 +178,13 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 ├── .devcontainer/         VS Code dev container on Podman (--userns=keep-id)
 {%- endif %}
 ├── .github/workflows/
+{%- if has_container %}
+│   ├── ci.yml             calls the template's shared, pinned CI workflow
+│   └── release.yml        tag v<version> → amd64/arm64 OCI archives + SBOM + provenance (no registry)
+{%- else %}
 │   └── ci.yml             calls the template's shared, pinned CI workflow
-├── .vscode/settings.json  interpreter pin (.venv) + ruff format on save
+{%- endif %}
+├── .vscode/settings.json  {% if has_devcontainer %}ruff format on save (the dev container sets its own interpreter){% else %}interpreter pin (.venv) + ruff format on save{% endif %}
 ├── .env.example           variable NAMES only (committed); copy to .env.dev/.env.test
 ├── .gitignore             Python + hardened team rules (secrets, keys, local state)
 ├── .mise.toml             tool pins + every task
@@ -191,7 +199,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 ├── docs/adr/              this project's architecture decision records
 {%- if nb %}
 ├── notebooks/             exploration only; logic moves to src/ with tests
-├── data/                  local data (git-ignored)
+├── data/                  local data: create it (mkdir data); git-ignored
 {%- endif %}
 ├── src/{{ package_name }}/
 │   ├── __init__.py        __version__ from installed metadata
@@ -227,7 +235,7 @@ The **src layout** (`src/{{ package_name }}/`) means tests import the installed 
 | `mypy --strict` | `None` handling, `Any` leaks, wrong call signatures | Strict from day one: retrofitting types later costs far more |
 | `pytest --cov` | Behaviour regressions | Coverage floor **{{ coverage_threshold }}%** with branch coverage: low enough to be achievable, high enough that untested modules stand out |
 | `uv-lock` hook | `pyproject.toml` changed without updating `uv.lock` | Lockfile must match |
-| `gitleaks` | API keys, tokens and private keys in staged changes | Any finding blocks the commit |
+| `gitleaks` | API keys, tokens and private keys: staged changes (hook) and every commit in history (`mise run ci`) | Any finding blocks the commit or fails CI |
 {%- if nb %}
 | `nbstripout` / `nbQA` | Committed outputs (data, secrets, huge diffs); lint errors in notebook cells | Outputs always stripped |
 {%- endif %}
@@ -245,12 +253,18 @@ Tests that call real external services are marked `@pytest.mark.live` and are sk
 
 - `.env.example` is committed and lists variable **names** with safe defaults only. Never put real values in it.
 - Copy it to `.env.dev`, `.env.test` or `.env.prod` and fill values locally. Every `.env*` file except the example is git-ignored.
-- `APP_ENV` (`dev` by default) picks which file is read{% if svc %} at start-up{% endif %}. **Real environment variables always win** over file values, so CI and containers configure the app without files.
+{%- if svc %}
+- `APP_ENV` (`dev` by default) picks which file is read at start-up. **Real environment variables always win** over file values, so CI and containers configure the app without files.
+{%- else %}
+- Nothing loads these files automatically. Where you need them, call `dotenv.load_dotenv(f".env.{os.environ.get('APP_ENV', 'dev')}")` (python-dotenv is a dependency); it never overrides real environment variables, which therefore always win.
+{%- endif %}
 {%- if svc %}
 - `src/{{ package_name }}/config.py` declares every setting with a type. A bad value (for example `LOG_LEVEL=LOUD` or `HTTP_PORT=80`) raises at start-up, so a misconfigured deploy fails immediately and visibly.
 - Declare any secret setting as `pydantic.SecretStr`. It then prints as `**********` in `{{ project_slug }} config`, in logs and in tracebacks, and you read it with `.get_secret_value()` only where it is used.
 {%- endif %}
 - Production values belong in the platform's secret store, or in a Podman secret. They never go in files, images or git.
+
+{%- if has_container %}
 
 To hand a secret to a container, declare it into a shell variable without echoing it, then create a Podman secret from that variable:
 
@@ -262,6 +276,16 @@ podman run --secret some_api_key,type=env,target=SOME_API_KEY {{ project_slug }}
 ```
 
 Replace `SOME_API_KEY` with the variable name your code reads. To rotate, `podman secret rm some_api_key` and create it again.
+{%- else %}
+
+To use a secret locally, declare it into a shell variable without echoing it, and unset it afterwards:
+
+```bash
+read -rs SOME_API_KEY && export SOME_API_KEY        # hidden input, not kept in shell history
+uv run {{ project_slug }} --help
+unset SOME_API_KEY
+```
+{%- endif %}
 
 {%- if svc %}
 
@@ -289,7 +313,7 @@ curl -si -H 'X-Request-ID: demo-1' http://127.0.0.1:{{ http_port }}/health/live 
 uv run {{ project_slug }} config        # validates and prints the effective settings (SecretStr values masked)
 ```
 
-Interactive API docs are at `http://127.0.0.1:{{ http_port }}/docs`.
+Interactive API docs are at `http://127.0.0.1:{{ http_port }}/docs` in `dev` and `test`. With `APP_ENV=prod`, `/docs`, `/redoc` and `/openapi.json` are switched off, so production does not advertise its full API surface.
 {%- endif %}
 
 {%- if nb %}
@@ -304,6 +328,7 @@ podman compose -f .container/compose.yaml up     # or in a container on 127.0.0.
 ```
 
 - Pick the **{{ kernel_display_name }}** kernel (register it once with `mise run kernel`).
+- In the compose container your host user appears as `app` (`userns_mode: keep-id`), so saved notebooks stay yours. `.git` is mounted read-only, so code in a kernel cannot write git hooks or history: commit from the host.
 - Keep reusable logic in `src/{{ package_name }}/` with tests; notebooks import it. Start notebooks with `%load_ext autoreload` and `%autoreload 2` so edits to `src/` are picked up without a restart.
 - Before sharing a notebook: *Restart Kernel and Run All Cells*, so it runs top to bottom.
 - Outputs are stripped on commit (nbstripout) and notebook code is linted (nbQA + ruff).
@@ -325,8 +350,8 @@ One multi-stage `.container/Containerfile`:
 |---|---|---|
 | `python-base` | `python:{{ python_version }}-slim` pinned by digest; OS packages upgraded; **pip removed**; non-root user `app` (uid 10001) | Every stage |
 | `build` | uv copied in; locked runtime dependencies and this package installed **non-editable** into `/opt/venv` | Internal |
-| `dev` | Plus the dev group{% if nb %} and the notebooks group{% endif %}; source bind-mounted over `/app` | Dev container{% if nb %}, compose{% endif %} |
-| `test` | Plus `tests/`; runs pytest, so **the build fails if the tests fail** | CI |
+| `dev` | Plus git and the default groups (dev{% if nb %}, notebooks{% endif %}); venv owned by `app`; source bind-mounted over `/app` | Dev container{% if nb %}, compose{% endif %} |
+| `test` | Plus `tests/` and `tools/`; runs pytest as `app`, so **the build fails if the tests fail** | CI |
 {%- if nb %}
 | `lab` | Runtime `/opt/venv` only; JupyterLab on 8888 as `app` | `mise run image` |
 {%- else %}
@@ -356,9 +381,12 @@ podman run --rm {{ project_slug }}:dev --help              # the CLI in a contai
 - **`/opt/venv` outside `/app`**: a bind-mounted source folder never hides or clashes with the environment.
 - **`UV_NO_CACHE=1`** and **`.containerignore`**: no uv cache, `.git`, `.venv`, egg-info or secrets end up in layers.
 {%- if svc %}
-- **Hardened run** (compose and smoke): `read_only: true` with a `tmpfs` for `/tmp`, `cap_drop: [ALL]`, `no-new-privileges`, ports bound to `127.0.0.1`, and a healthcheck written in Python because the image deliberately has no curl.
+- **Hardened run** (compose and smoke): read-only root filesystem with a `tmpfs` for `/tmp`, all capabilities dropped, `no-new-privileges`, ports bound to `127.0.0.1`. Compose's healthcheck is written in Python because the image deliberately has no curl.
 {%- endif %}
-- **Rootless notes**: use host ports of 1024 or higher; add `:Z` to bind mounts on SELinux hosts (Fedora, RHEL); the dev container uses `--userns=keep-id` so files you create keep your host user ID.
+- **Rootless notes**: use host ports of 1024 or higher; add `:Z` to bind mounts on SELinux hosts (Fedora, RHEL). The dev container{% if nb %} and the lab compose service{% endif %} map your host user to `app` (`keep-id:uid=10001,gid=10001`), so files you create stay yours on the host.
+{%- if has_devcontainer %}
+- **Dev container and git hooks**: the git hooks are installed by `mise run bootstrap` **on the host**. The container does not reinstall them: host and container share `.git/hooks`, and each side would point the hook at its own Python. Commit from either side; run `mise run ci` before pushing.
+{%- endif %}
 
 ---
 
@@ -370,9 +398,30 @@ podman run --rm {{ project_slug }}:dev --help              # the CLI in a contai
 CVE-2026-12345  # reason: not reachable, we never parse untrusted TAR files; owner: platform-team; expires: 2027-01-31
 ```
 
-`tools/check_scan_exceptions.py` runs first and fails the scan if any entry lacks these fields or has expired, so exceptions cannot quietly become permanent. Prefer fixing: rebuild with `--pull=newer`, bump the dependency (`uv lock --upgrade-package <name>`), or `copier update` to pick up a newer base digest.
+`tools/check_scan_exceptions.py` runs first and fails the scan if any entry lacks these fields, has expired, or expires more than 90 days ahead, so exceptions cannot quietly become permanent. It also refuses a `trivy.yaml` or VEX file in the repo: trivy reads `trivy.yaml` automatically, and such a file could skip paths or suppress findings without any of these checks. Prefer fixing: rebuild with `--pull=newer`, bump the dependency (`uv lock --upgrade-package <name>`), or `copier update` to pick up a newer base digest.
 
-`mise run sbom` writes a CycloneDX SBOM (`sbom.cdx.json`) of the image. CI uploads it as a build artifact.
+`mise run sbom` writes a CycloneDX SBOM (`sbom.cdx.json`, git-ignored) of the image. CI uploads it as a build artifact.
+
+---
+
+## Releasing
+
+There is no container registry (template ADR 0011). A release is a GitHub release that carries the image itself:
+
+1. Set `version` in `pyproject.toml` (for example `0.2.0`, or `0.2.0rc1` for a pre-release), run `uv lock`, and merge to `main`.
+2. Tag it: `git tag v0.2.0 && git push origin v0.2.0`. The release workflow refuses a tag that does not match the version; `v0.2.0-rc.1` matches `0.2.0rc1` and becomes a pre-release.
+3. `.github/workflows/release.yml` runs the gates, builds the image natively on amd64 and arm64, runs the in-image tests, exports each image as an OCI archive, scans it, writes an SBOM, and publishes them with `SHA256SUMS`. It also records build provenance, signed by a separate job that runs none of this project's code. Provenance is skipped on private repos, because GitHub only supports it there on Enterprise Cloud.
+
+To use a release:
+
+```bash
+gh release download v0.2.0 -R {{ github_owner }}/{{ project_slug }}
+sha256sum -c SHA256SUMS
+gh attestation verify {{ project_slug }}-0.2.0-linux-arm64.oci.tar -R {{ github_owner }}/{{ project_slug }}   # public repos
+podman load -i {{ project_slug }}-0.2.0-linux-arm64.oci.tar
+```
+
+**Why no registry:** nothing to authenticate to and no credentials in CI. An archive plus SBOM plus provenance is a complete, verifiable artifact. Adding a registry later is one extra job after the scan.
 {%- endif %}
 
 ---
@@ -385,7 +434,7 @@ CVE-2026-12345  # reason: not reachable, we never parse untrusted TAR files; own
 uses: {{ github_owner }}/python-project-template/.github/workflows/python-ci.yml@{{ template_ref }}
 ```
 
-The shared workflow installs the pinned mise, runs `mise run ci`{% if has_container %}, then builds the image with Podman, scans it with trivy and uploads the SBOM{% if svc %}, and runs the smoke test{% endif %}{% endif %}. All third-party actions are pinned by commit SHA.
+The shared workflow installs the pinned mise and runs `mise run ci`{% if has_container %}. It then builds the `test` stage, builds the image with Podman, scans it with trivy and uploads the SBOM{% if svc %}, and runs the smoke test{% endif %}{% endif %}. All third-party actions and pre-commit hooks are pinned by commit SHA.
 
 **Why a shared workflow:** CI logic lives in one place. Fixes and hardening reach every project when `copier update` bumps the pinned version, rather than being copy-pasted into each repo.
 
@@ -404,7 +453,7 @@ Branch protection should require the check named **`check / check`**.
 | Dev tooling (tests, linters) | `[dependency-groups].dev` | `uv add --group dev <pkg>` | No |
 | Security tooling | `[dependency-groups].security` | `uv add --group security <pkg>` | No |
 {%- if nb %}
-| Notebook extras | `[dependency-groups].notebooks` | `uv add --group notebooks <pkg>` | No (installed in dev and by `mise run lab`) |
+| Notebook extras | `[dependency-groups].notebooks` | `uv add --group notebooks <pkg>` | No. A default group here (`[tool.uv] default-groups`), so plain `uv sync` and CI keep it |
 {%- endif %}
 
 - **Dependency groups, not extras, for tooling** (PEP 735): plain `uv sync` installs the `dev` group, and nothing in a group can leak into a published package.
@@ -452,8 +501,10 @@ mise run bootstrap && mise run ci
 | Permission denied on bind-mounted files (Linux) | Add `:Z` to the mount (SELinux) and use `--userns=keep-id` |
 | `trivy` fails with expired or undocumented exceptions | Fix the finding or renew the `.trivyignore` entry with a new reason, owner and expiry |
 | VS Code dev container tries to use Docker | In your **user** settings set `"dev.containers.dockerPath": "podman"` |
+| `scan`: "trivy config files are not allowed" | Remove `trivy.yaml` or VEX files; record exceptions in `.trivyignore` instead |
 {%- endif %}
 {%- if nb %}
 | Notebook cannot import `{{ package_name }}` | Select the **{{ kernel_display_name }}** kernel; run `mise run kernel` if it is missing |
 {%- endif %}
+| `Validation error for question ...` during `copier update` | An answer is no longer valid under the template's rules (for example quotes in the name). Fix it with `copier update --data <question>=<value>` |
 | CI cannot find the shared workflow | The template repo is private or the ref does not exist; see the note under [CI](#continuous-integration) |

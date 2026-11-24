@@ -39,7 +39,11 @@ services:
     command: jupyter lab --ip 0.0.0.0 --port 8888 --no-browser
     working_dir: /app
     ports: ["127.0.0.1:8888:8888"]    # bound to your machine only
-    volumes: ["..:/app:Z"]            # :Z relabels for SELinux hosts; harmless elsewhere
+    userns_mode: "keep-id:uid=10001,gid=10001"   # your host user appears as `app`, so saved notebooks stay yours
+    volumes:
+      - "..:/app:Z"                   # :Z relabels for SELinux hosts; harmless elsewhere
+      - "../.git:/app/.git:ro,Z"      # kernels cannot write git hooks or history; commit on the host
+    tmpfs: [/tmp]
     env_file:
       - path: ../.env.dev
         required: false

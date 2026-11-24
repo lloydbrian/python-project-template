@@ -14,10 +14,10 @@ _message_after_copy: |
   Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}).
 
   Next steps (details in README.md):
-    1. cd {{ _copier_conf.dst_path }}
-    2. git init && git add -A && git commit -m "chore: scaffold from python-project-template {{ template_ref }}"
-    3. mise trust && mise install && mise run bootstrap
-    4. cp .env.example .env.dev      # fill values locally; never commit
+    1. cd {{ _copier_conf.dst_path }} && git init
+    2. mise trust && mise install && mise run bootstrap   # creates uv.lock: CI needs it committed
+    3. cp .env.example .env.dev      # fill values locally; never committed
+    4. git add -A && git commit -m "chore: scaffold from python-project-template {{ template_ref }}"
     5. mise run ci
 
 _message_after_update: |
@@ -40,16 +40,19 @@ project_type:
 project_name:
   type: str
   help: Human-readable project name (e.g. "Ticket Triage")
-  validator: "{% if not project_name.strip() %}A project name is required{% endif %}"
+  validator: >-
+    {% if not project_name.strip() %}A project name is required{% elif '"' in project_name or '\\' in project_name
+    or '\n' in project_name %}Avoid double quotes, backslashes and line breaks (the name is written into TOML and Python){% endif %}
 
 project_slug:
   type: str
   help: Repository and distribution name (lowercase letters, digits, hyphens)
-  default: "{{ project_name.strip() | lower | replace(' ', '-') | replace('_', '-') }}"
+  default: "{{ project_name.strip() | lower | replace(' ', '-') | replace('_', '-') | list | select('in', 'abcdefghijklmnopqrstuvwxyz0123456789-') | join }}"
   validator: >-
     {% if not project_slug or project_slug[0] not in 'abcdefghijklmnopqrstuvwxyz'
+    or project_slug[-1] == '-' or '--' in project_slug
     or (project_slug | list | reject('in', 'abcdefghijklmnopqrstuvwxyz0123456789-') | list) %}Use lowercase
-    letters, digits and hyphens, starting with a letter{% endif %}
+    letters, digits and single hyphens, starting with a letter and not ending with a hyphen{% endif %}
 
 package_name:
   type: str
@@ -64,11 +67,13 @@ description:
   type: str
   help: One-line description
   default: "{{ project_name }}"
+  validator: "{% if '\"' in description or '\\\\' in description or '\\n' in description %}Avoid double quotes, backslashes and line breaks{% endif %}"
 
 author_name:
   type: str
   help: Author or owning team
   default: Lloyd D.
+  validator: "{% if '\"' in author_name or '\\\\' in author_name or '\\n' in author_name %}Avoid double quotes, backslashes and line breaks{% endif %}"
 
 python_version:
   type: str
@@ -122,6 +127,7 @@ kernel_display_name:
   help: Jupyter kernel display name
   default: "Python ({{ project_slug }})"
   when: "{{ project_type == 'notebooks' }}"
+  validator: "{% if \"'\" in kernel_display_name or '\"' in kernel_display_name or '\\\\' in kernel_display_name %}Avoid quotes and backslashes (the name is passed through the shell){% endif %}"
 
 # ---------------------------------------------------------------------------
 # Computed values: never asked, never saved, re-evaluated on every update.
@@ -150,6 +156,11 @@ uv_version:
 trivy_version:
   type: str
   default: 0.76.2
+  when: false
+
+gitleaks_version:
+  type: str
+  default: 8.30.1
   when: false
 
 mise_version:

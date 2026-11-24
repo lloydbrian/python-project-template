@@ -5,8 +5,8 @@
 #   mise run pin-images -- --write   # apply the change to copier.yml (review with `git diff`)
 #
 # Run by the template maintainer before a release, on a machine that can reach the registries.
-# Uses `skopeo` if installed (brew install skopeo), otherwise runs skopeo in a Podman container.
-# Reads registries only; writes nothing except copier.yml, and only with --write.
+# Needs `skopeo` (brew install skopeo). Reads registries only; writes nothing except copier.yml,
+# and only with --write.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -16,16 +16,12 @@ WRITE=0
 uv_version="$(awk '/^uv_version:/{f=1} f&&/default:/{print $2; exit}' "$ROOT/copier.yml")"
 [ -n "$uv_version" ] || { echo "cannot read uv_version from copier.yml" >&2; exit 1; }
 
-skopeo_cmd() {
-  if command -v skopeo >/dev/null 2>&1; then skopeo "$@"
-  else podman run --rm quay.io/skopeo/stable:latest "$@"   # maintainer-only tool, never shipped
-  fi
-}
+command -v skopeo >/dev/null 2>&1 || { echo "skopeo is required: brew install skopeo" >&2; exit 1; }
 
 digest_of() {   # $1 = fully qualified image:tag  -> prints sha256:<hex> of the index manifest
-  local raw
-  raw="$(skopeo_cmd inspect --raw "docker://$1")"
-  printf '%s' "$raw" | python3 -c '
+  # Piped straight into Python: the digest is over the exact bytes (command substitution would
+  # strip trailing newlines and produce a wrong digest).
+  skopeo inspect --raw "docker://$1" | python3 -c '
 import hashlib, json, sys
 data = sys.stdin.buffer.read()
 media = json.loads(data).get("mediaType", "")

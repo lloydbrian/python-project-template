@@ -7,9 +7,12 @@
 Rules:
   1. Every third-party `uses:` in .github/workflows is pinned to a 40-character commit SHA.
   2. Container images in template Containerfiles are fully qualified and never `:latest`.
-  3. Versions agree: copier.yml's uv_version equals the uv-pre-commit rev in the template hooks,
-     and the default mise-version in the shared workflows equals copier.yml's mise_version.
-  4. (--release) template_ref equals the tag, and no digest is still sha256:PENDING.
+  3. Every pre-commit hook `rev:` (template and this repo) is a 40-character commit SHA with the
+     tag in a `# frozen: <tag>` comment.
+  4. Versions agree: copier.yml's uv_version equals the uv-pre-commit frozen tag; the shared
+     workflows' default mise-version equals copier.yml's mise_version; and the root .mise.toml
+     pins the same uv, trivy and gitleaks versions as copier.yml.
+  5. (--release) template_ref equals the tag, and no digest is still sha256:PENDING.
 """
 
 from __future__ import annotations
@@ -59,9 +62,22 @@ def check(root: Path, release: bool, tag: str | None) -> list[str]:
     copier = (root / "copier.yml").read_text()
     uv_version = copier_value(copier, "uv_version")
     hooks = (root / "template/.pre-commit-config.yaml.jinja").read_text()
-    m = re.search(r"astral-sh/uv-pre-commit\n\s+rev:\s*(\S+)", hooks)
+    for cfg in (root / "template/.pre-commit-config.yaml.jinja", root / ".pre-commit-config.yaml"):
+        for n, line in enumerate(cfg.read_text().splitlines(), 1):
+            m = re.match(r"\s*rev:\s*(\S+)(?:\s+#\s*frozen:\s*(\S+))?", line)
+            if m and not (SHA.match(m.group(1)) and m.group(2)):
+                errors.append(f"{cfg.relative_to(root)}:{n}: hook rev must be a commit SHA with '# frozen: <tag>'")
+    m = re.search(r"astral-sh/uv-pre-commit\n\s+rev:\s*\S+\s+#\s*frozen:\s*(\S+)", hooks)
     if not m or m.group(1) != uv_version:
-        errors.append(f"uv-pre-commit rev ({m.group(1) if m else 'missing'}) != copier uv_version ({uv_version})")
+        errors.append(
+            f"uv-pre-commit frozen tag ({m.group(1) if m else 'missing'}) != copier uv_version ({uv_version})"
+        )
+    root_mise = (root / ".mise.toml").read_text()
+    for tool, key in (("uv", "uv_version"), ("trivy", "trivy_version"), ("gitleaks", "gitleaks_version")):
+        m = re.search(rf'^{tool}\s*=\s*"([^"]+)"', root_mise, re.MULTILINE)
+        want = copier_value(copier, key)
+        if not m or m.group(1) != want:
+            errors.append(f"root .mise.toml {tool} ({m.group(1) if m else 'missing'}) != copier {key} ({want})")
     mise_version = copier_value(copier, "mise_version")
     for wf in ("python-ci.yml", "python-release.yml"):
         text = (root / ".github/workflows" / wf).read_text()

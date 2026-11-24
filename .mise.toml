@@ -24,7 +24,7 @@ ignored="$(git status --ignored --porcelain template/ | grep '^!!' || true)"
 """
 
 [tasks.render]
-description = "Render one variant into .render/<variant> without running gates: mise run render -- service"
+description = "Render one variant (into <tmp>/python-project-template-render/<variant>) without running gates: mise run render -- service"
 run = "python3 scripts/render.py --no-gates"
 
 [tasks.render-test]

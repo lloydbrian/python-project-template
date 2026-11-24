@@ -1,21 +1,40 @@
-# Never send these to the Podman build context
-.env
-.env.*
+# Never send these to the Podman build context. Patterns use **/ so they match at any depth.
+# Secrets and credentials (mirrors .gitignore)
+**/.env
+**/.env.*
 !.env.example
-.venv/
+**/.envrc
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/id_ed25519*
+**/secrets/
+**/.aws/
+**/.netrc
+**/.pypirc
+**/credentials*.json
+**/kubeconfig*
+**/.mise.local.toml
+**/.claude/
+# Local state, caches and build output
 .git/
 .github/
 .devcontainer/
 .vscode/
+**/.venv/
 **/__pycache__/
 **/*.egg-info/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.coverage
 htmlcov/
+dist/
+build/
 data/
-*-image.tar
+*.tar
 sbom.cdx.json
 {%- if project_type != "notebooks" %}
 notebooks/
