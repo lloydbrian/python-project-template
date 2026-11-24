@@ -5,7 +5,7 @@ Every entry must read:
 Exceptions are time-boxed (at most MAX_DAYS ahead) so accepted risk is re-reviewed instead of
 silently living forever. A trivy config or VEX file next to .trivyignore is refused: trivy reads
 `trivy.yaml` from the working directory automatically, and it could skip paths or suppress findings
-without any of the checks above.
+without any of the checks above. TRIVY_* variables in .mise.toml are refused for the same reason.
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ def check(path: Path, today: date | None = None) -> list[str]:
             )
     for vex in sorted(folder.glob("*vex*.json")):
         problems.append(f"{vex}: VEX files are not allowed; use .trivyignore entries")
+    mise = folder / ".mise.toml"
+    if mise.exists() and "TRIVY_" in mise.read_text(encoding="utf-8"):
+        problems.append(f"{mise}: TRIVY_* settings are not allowed; they override the scan policy")
     if not path.exists():
         return problems
     for n, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):

@@ -221,6 +221,13 @@ CONTROLS = [
         marker="not allowed",
     ),
     Control(
+        "scan-env-bypass",
+        "TRIVY_* settings in .mise.toml (which trivy reads from the environment) fail the scan pre-check",
+        "uv run python tools/check_scan_exceptions.py .trivyignore",
+        lambda p: (p / ".mise.toml").write_text((p / ".mise.toml").read_text() + '\n[env]\nTRIVY_SKIP_DIRS = "opt"\n'),
+        marker="TRIVY_",
+    ),
+    Control(
         "name-validator",
         "a project name that would break TOML/Python is refused at question time",
         "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"

@@ -47,7 +47,7 @@ project_name:
 project_slug:
   type: str
   help: Repository and distribution name (lowercase letters, digits, hyphens)
-  default: "{{ project_name.strip() | lower | replace(' ', '-') | replace('_', '-') | list | select('in', 'abcdefghijklmnopqrstuvwxyz0123456789-') | join }}"
+  default: "{{ (project_name.strip() | lower | replace(' ', '-') | replace('_', '-') | list | select('in', 'abcdefghijklmnopqrstuvwxyz0123456789-') | join).replace('--', '-').replace('--', '-').replace('--', '-').strip('-') }}"
   validator: >-
     {% if not project_slug or project_slug[0] not in 'abcdefghijklmnopqrstuvwxyz'
     or project_slug[-1] == '-' or '--' in project_slug

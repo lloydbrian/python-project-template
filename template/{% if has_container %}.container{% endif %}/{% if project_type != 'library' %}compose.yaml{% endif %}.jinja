@@ -29,6 +29,9 @@ services:
 {%- else %}
 # JupyterLab in a container, using the dev stage so edits in src/ are importable immediately.
 # Open the tokenized URL printed in the logs; keep token authentication on.
+# Needs a git repository (`git init`): .git is mounted read-only below.
+# Kernels can still edit tracked files (src/, .mise.toml, conftest.py): review `git status`
+# before running tasks on the host after a session.
 services:
   lab:
     build:

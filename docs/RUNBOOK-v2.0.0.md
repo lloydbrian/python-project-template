@@ -45,7 +45,7 @@ shasum -a 256 -c SHA256SUMS
 git bundle verify template-repo-files-v2.bundle
 ```
 
-**Expect:** every line `OK`; `The bundle records a complete history` (or `requires` the v1 main commit, `af08824`, which you already have).
+**Expect:** five lines ending `OK`; `... template-repo-files-v2.bundle is okay`; and `The bundle requires this ref: af08824...` (v1 `main`, which you already have).
 **Stop if:** any checksum fails. Do not apply a bundle that does not match.
 
 ---
@@ -78,7 +78,7 @@ PY
 
 ```bash
 mise trust && mise install
-mise run template-ci                                   # lint, 5 variants, 19 negative controls, update test
+mise run template-ci                                   # lint, 5 variants, 20 negative controls, update test
 REQUIRE_CONTAINER=1 mise run render-test -- service    # image test stage, build, scan, SBOM, smoke
 REQUIRE_CONTAINER=1 mise run render-test -- notebooks
 ```
@@ -86,7 +86,7 @@ REQUIRE_CONTAINER=1 mise run render-test -- notebooks
 **Expect:**
 - `render-test <variant>: PASS` for all five variants;
 - every container variant prints `image_sim: target test: PASS`;
-- `negative controls: 19/19 caught`;
+- `negative controls: 20/20 caught`;
 - `update-test: ... PASS`;
 - with `REQUIRE_CONTAINER=1`: `smoke: OK`, and trivy exits 0.
 
@@ -164,7 +164,7 @@ git remote -v && git fetch origin && git log --oneline -1
 **Undo the rename:** `gh repo rename template-repo-files -R "$OWNER/python-project-template" --yes`.
 
 **Post-flight: protect what projects depend on.** GitHub → `python-project-template` → *Settings*:
-- *Rules → Rulesets → New tag ruleset*: target `v*`; enable **Restrict updates** and **Restrict deletions**; no bypass list (or only you); set *Enforcement status* to Active. Generated projects call the shared workflows by tag, so a tag must never move.
+- *Rules → Rulesets → New tag ruleset*: target `v*`; enable **Restrict updates** and **Restrict deletions**; bypass list: **Repository admin** only (for emergencies); set *Enforcement status* to Active. Generated projects call the shared workflows by tag, so a tag must never move. Fix a bad tag by publishing the next one (`-rc.2`, `v2.0.1`), not by moving it.
 - *Branches*: branch protection on `main`, with the required checks set to the template's jobs (`lint`, `render (service)` and the rest), not the old `check`.
 
 ---
@@ -180,7 +180,7 @@ gh release view v2.0.0-rc.1 --json tagName,isPrerelease
 
 **Expect:** the `release` workflow passes `verify`, then `template-ci`, then `publish`. The release shows `"isPrerelease": true`.
 **Stop if:** `verify` fails. It names the problem (ref mismatch or PENDING digest).
-**Undo:** `gh release delete v2.0.0-rc.1 --yes && git push origin :refs/tags/v2.0.0-rc.1 && git tag -d v2.0.0-rc.1`.
+**If it fails:** fix on `main`, set `template_ref` to `v2.0.0-rc.2`, and tag `v2.0.0-rc.2`. The tag ruleset blocks moving or deleting `v2.0.0-rc.1`, by design. Deleting it needs your admin bypass and is only worth it if nothing has used it yet.
 
 ---
 
@@ -301,5 +301,5 @@ cd "$REF" && git switch -c chore/template-v2.0.0 && copier update --vcs-ref v2.0
 After step 10, append to `docs/RELEASES.md`:
 
 ```text
-2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 5/5 variants, 19/19 controls, update PASS
+2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 5/5 variants, 20/20 controls, update PASS
 ```

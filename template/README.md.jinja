@@ -328,7 +328,7 @@ podman compose -f .container/compose.yaml up     # or in a container on 127.0.0.
 ```
 
 - Pick the **{{ kernel_display_name }}** kernel (register it once with `mise run kernel`).
-- In the compose container your host user appears as `app` (`userns_mode: keep-id`), so saved notebooks stay yours. `.git` is mounted read-only, so code in a kernel cannot write git hooks or history: commit from the host.
+- In the compose container your host user appears as `app` (`userns_mode: keep-id`), so saved notebooks stay yours. `.git` is mounted read-only, so code in a kernel cannot write git hooks or history: commit from the host (run `git init` before the first `compose up`). Kernels can still edit tracked files, so review `git status` before running tasks on the host after a session.
 - Keep reusable logic in `src/{{ package_name }}/` with tests; notebooks import it. Start notebooks with `%load_ext autoreload` and `%autoreload 2` so edits to `src/` are picked up without a restart.
 - Before sharing a notebook: *Restart Kernel and Run All Cells*, so it runs top to bottom.
 - Outputs are stripped on commit (nbstripout) and notebook code is linted (nbQA + ruff).
@@ -398,7 +398,7 @@ podman run --rm {{ project_slug }}:dev --help              # the CLI in a contai
 CVE-2026-12345  # reason: not reachable, we never parse untrusted TAR files; owner: platform-team; expires: 2027-01-31
 ```
 
-`tools/check_scan_exceptions.py` runs first and fails the scan if any entry lacks these fields, has expired, or expires more than 90 days ahead, so exceptions cannot quietly become permanent. It also refuses a `trivy.yaml` or VEX file in the repo: trivy reads `trivy.yaml` automatically, and such a file could skip paths or suppress findings without any of these checks. Prefer fixing: rebuild with `--pull=newer`, bump the dependency (`uv lock --upgrade-package <name>`), or `copier update` to pick up a newer base digest.
+`tools/check_scan_exceptions.py` runs first and fails the scan if any entry lacks these fields, has expired, or expires more than 90 days ahead, so exceptions cannot quietly become permanent. It also refuses a `trivy.yaml`, a VEX file, or `TRIVY_*` settings in `.mise.toml`: trivy reads them automatically, and they could skip paths or suppress findings without any of these checks. Prefer fixing: rebuild with `--pull=newer`, bump the dependency (`uv lock --upgrade-package <name>`), or `copier update` to pick up a newer base digest.
 
 `mise run sbom` writes a CycloneDX SBOM (`sbom.cdx.json`, git-ignored) of the image. CI uploads it as a build artifact.
 
@@ -409,8 +409,8 @@ CVE-2026-12345  # reason: not reachable, we never parse untrusted TAR files; own
 There is no container registry (template ADR 0011). A release is a GitHub release that carries the image itself:
 
 1. Set `version` in `pyproject.toml` (for example `0.2.0`, or `0.2.0rc1` for a pre-release), run `uv lock`, and merge to `main`.
-2. Tag it: `git tag v0.2.0 && git push origin v0.2.0`. The release workflow refuses a tag that does not match the version; `v0.2.0-rc.1` matches `0.2.0rc1` and becomes a pre-release.
-3. `.github/workflows/release.yml` runs the gates, builds the image natively on amd64 and arm64, runs the in-image tests, exports each image as an OCI archive, scans it, writes an SBOM, and publishes them with `SHA256SUMS`. It also records build provenance, signed by a separate job that runs none of this project's code. Provenance is skipped on private repos, because GitHub only supports it there on Enterprise Cloud.
+2. Tag it: `git tag v0.2.0 && git push origin v0.2.0`. The release workflow refuses a tag whose normalised version differs from `pyproject.toml`; `v0.2.0-rc.1` matches `0.2.0rc1` and becomes a pre-release.
+3. `.github/workflows/release.yml` runs the gates, builds the image natively on amd64 and arm64, runs the in-image tests, exports each image as an OCI archive, scans it, writes an SBOM, and publishes them with `SHA256SUMS`. It also records build provenance, signed by a separate job that runs none of this project's code. Private repos always skip provenance: GitHub supports it there only on Enterprise Cloud, which the template does not assume.
 
 To use a release:
 

@@ -26,8 +26,9 @@ on:
         default: "2026.11.13"
       attest:
         description: >-
-          Record build provenance. GitHub supports artifact attestations for public repositories,
-          and for private ones only on GitHub Enterprise Cloud; private repos on other plans skip it.
+          Record build provenance on public repositories. Private repositories always skip it:
+          GitHub supports attestations there only on Enterprise Cloud, which this template does
+          not assume.
         type: boolean
         default: true
 
@@ -48,6 +49,8 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
     env:
       MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
       NAME: ${{ inputs.name }}
@@ -56,6 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0          # full history, so `mise run ci`'s secret scan sees every commit
           persist-credentials: false
 
       - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
@@ -64,15 +68,19 @@ jobs:
           install: true
 
       - name: Tag must match the project version
-        # Compared as PEP 440 versions, so tag v0.2.0-rc.1 matches version 0.2.0rc1.
+        id: version
+        # Normalised PEP 440 forms must be identical: v0.2.0-rc.1 matches 0.2.0rc1, but v0.2
+        # does not match 0.2.0. Pre-release status comes from the same parse.
         run: |
           version="$(uv version --short)"
-          uv run --no-project --with 'packaging>=24' python - "$GITHUB_REF_NAME" "$version" <<'PY'
-          import sys
+          uv run --no-project --with 'packaging==25.0' python - "$GITHUB_REF_NAME" "$version" <<'PY'
+          import os, sys
           from packaging.version import Version
-          tag, version = sys.argv[1], sys.argv[2]
-          if Version(tag) != Version(version):
-              sys.exit(f"::error::tag {tag} does not match project version {version}")
+          tag, version = Version(sys.argv[1]), Version(sys.argv[2])
+          if str(tag) != str(version):
+              sys.exit(f"::error::tag {sys.argv[1]} does not match project version {sys.argv[2]}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"prerelease={'true' if tag.is_prerelease else 'false'}\n")
           PY
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
@@ -155,7 +163,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           prerelease=""
-          case "$GITHUB_REF_NAME" in *-*|*rc*|*a[0-9]*|*b[0-9]*|*dev*) prerelease="--prerelease" ;; esac
+          [ "$PRERELEASE" = "true" ] && prerelease="--prerelease"
           gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME" $prerelease

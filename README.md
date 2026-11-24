@@ -196,12 +196,12 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Secrets | `gitleaks` hook (staged) + `gitleaks git` in `mise run ci` (full history) | A token, key or password in any commit, including ones made with `--no-verify` |
 | Dependencies | `pip-audit` | A dependency with a published CVE |
 | Code security | `bandit` | Insecure patterns in `src/` |
-| Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is never copied by the Containerfile |
+| Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is not copied by the Containerfile, is excluded by `.containerignore`, or a `license-files` entry is missing |
 | Image tests | `podman build --target test` | Tests fail inside the image |
-| Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`/VEX file that could bypass the policy |
+| Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`, VEX file or `TRIVY_*` setting in `.mise.toml` that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 19 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, a trivy config bypass, image and action pin policy, and the project-name validator. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 20 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, and the project-name validator. A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -223,7 +223,7 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Health | Python-based healthcheck | The image deliberately has no curl or wget |
 | Scan | trivy: fixable HIGH/CRITICAL fail; exceptions time-boxed with reason, owner and expiry | Accepted risk is re-reviewed instead of living forever |
 | Inventory | CycloneDX SBOM per build and release | Know exactly what shipped |
-| Provenance | GitHub artifact attestations on release archives and SBOMs, signed by a job that runs no project code | Prove where and how an image was built (`gh attestation verify`). Public repos, or private on Enterprise Cloud |
+| Provenance | GitHub artifact attestations on release archives and SBOMs, signed by a job that runs no project code | Prove where and how an image was built (`gh attestation verify`). Public repos only |
 | Secrets | `podman secret` at run time; never `ENV` or `COPY` | Nothing secret in any layer |
 
 ---
@@ -274,7 +274,7 @@ Decided 2026-11-23 ([ADR 0011](docs/adr/0011-release-artifacts-without-registry.
 - `<name>-<version>-linux-amd64.oci.tar` and `...-linux-arm64.oci.tar`, built on native runners
 - one CycloneDX SBOM per architecture
 - `SHA256SUMS`
-- a build-provenance attestation for each archive and SBOM (public repos; GitHub supports attestations on private repos only with Enterprise Cloud, so private repos skip this step)
+- a build-provenance attestation for each archive and SBOM, on public repos. Private repos always skip it: GitHub supports attestations there only on Enterprise Cloud, which the template does not assume
 
 ```bash
 gh release download v0.1.0 -R owner/project
@@ -283,7 +283,7 @@ gh attestation verify ticket-triage-0.1.0-linux-arm64.oci.tar -R owner/project
 podman load -i ticket-triage-0.1.0-linux-arm64.oci.tar
 ```
 
-Release a project by setting `version` in `pyproject.toml`, then tagging `v<version>`. The workflow refuses a tag that does not match (compared as PEP 440 versions, so `v0.2.0-rc.1` matches `0.2.0rc1` and is published as a pre-release).
+Release a project by setting `version` in `pyproject.toml`, then tagging `v<version>`. The workflow refuses a tag whose normalised PEP 440 form differs (`v0.2.0-rc.1` matches `0.2.0rc1` and is published as a pre-release; `v0.2` does not match `0.2.0`).
 
 ---
 
@@ -345,7 +345,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 | Slow builds or `exec format error` on Apple silicon | Build for your own architecture (the default). CI covers the other one natively |
 | Project CI: "workflow was not found" | The `template_ref` tag does not exist yet, or the template repo is private without access granted |
 | Release job fails "sha256:PENDING" | Run `mise run pin-images -- --write` and commit before tagging |
-| Release `verify` fails "template_ref is ... but the tag is ..." | Set `template_ref` in `copier.yml` to exactly the tag you push (rc tags included), commit, re-tag |
+| Release `verify` fails "template_ref is ... but the tag is ..." | Set `template_ref` in `copier.yml` to exactly the tag you push (rc tags included), commit, and tag the next version (`-rc.2`); the tag ruleset stops tags being moved |
 
 ---
 
@@ -411,7 +411,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 19 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | 20 negative controls in template CI |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 24 LTS, Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |

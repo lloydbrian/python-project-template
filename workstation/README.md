@@ -84,6 +84,7 @@ git config --global core.excludesFile ~/.config/git/ignore
 ```bash
 brew install zsh-autosuggestions zsh-syntax-highlighting starship
 brew install --cask font-jetbrains-mono-nerd-font iterm2 --appdir=~/Applications
+gh auth status >/dev/null 2>&1 || gh auth login     # once: stores the token in the macOS keychain
 gh repo clone lloydbrian/python-project-template ~/Developer/repositories/python-project-template
 cd ~/Developer/repositories/python-project-template
 mkdir -p ~/.config

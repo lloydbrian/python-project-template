@@ -37,3 +37,8 @@ def test_far_future_expiry_fails(tmp_path: Path) -> None:
 def test_trivy_config_file_fails(tmp_path: Path) -> None:
     (tmp_path / "trivy.yaml").write_text("scan:\n  skip-dirs: [opt/venv]\n")
     assert "not allowed" in _mod.check(tmp_path / ".trivyignore")[0]
+
+
+def test_trivy_env_override_fails(tmp_path: Path) -> None:
+    (tmp_path / ".mise.toml").write_text('[env]\nTRIVY_SKIP_DIRS = "opt/venv"\n')
+    assert "TRIVY_" in _mod.check(tmp_path / ".trivyignore")[0]

@@ -14,7 +14,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Shared workflows `python-ci.yml` and `python-release.yml` called by generated projects at a pinned release (ADR 0009).
 - Releases without a registry: multi-arch OCI archives, CycloneDX SBOMs, build provenance, `SHA256SUMS` (ADR 0011).
 - Time-boxed `.trivyignore` exceptions validated by `tools/check_scan_exceptions.py` (ADR 0006).
-- Template CI: render matrix (5 variants) with an image build-context simulation (`scripts/image_sim.py`), 19 negative controls, `copier update` test, pin policy, actionlint.
+- Template CI: render matrix (5 variants) with an image build-context simulation (`scripts/image_sim.py`), 20 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
 - ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
