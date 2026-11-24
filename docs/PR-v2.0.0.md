@@ -34,7 +34,7 @@ v2 removes those failure modes structurally. The README's "Why this template exi
   - time-boxed scan exceptions, at most 90 days, with no trivy config bypass.
 - **Template CI**:
   - 6-variant render matrix, each running its own gates plus an image build-context simulation;
-  - 20 negative controls;
+  - 22 negative controls;
   - a `copier update` test.
 - **Docs**:
   - root and generated READMEs that explain the *why* of every tool and step;
@@ -44,8 +44,8 @@ v2 removes those failure modes structurally. The README's "Why this template exi
 
 ### Verification
 - Gates in the build sandbox:
-  - 6/6 variants (Python 3.15 default, plus 3.14 and 3.13) pass lint, format, mypy (strict), pytest with coverage, pip-audit, bandit, full-history gitleaks and image-stage simulation;
-  - 19/20 negative controls caught;
+  - 8/8 variants (Python 3.15 default, 3.14, 3.13, and both AI stacks) pass lint, format, mypy (strict), pytest with coverage, pip-audit, bandit, full-history gitleaks and image-stage simulation;
+  - 19/22 negative controls caught;
   - the update test passes;
   - actionlint, pre-commit and the pin policy are clean.
 - Independent review covered four lenses (correctness, security, operability, docs accuracy), with a verifier afterwards. All confirmed findings are fixed in `fix: address independent review findings`.

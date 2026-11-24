@@ -15,5 +15,6 @@ Decisions behind python-project-template. Format: [ADR 0001](0001-record-archite
 | [0009](0009-reusable-ci-workflow.md) | Projects call one versioned, reusable workflow |
 | [0010](0010-service-runtime-baseline.md) | Service baseline: factory, health, request ID, JSON logs, typed settings |
 | [0011](0011-release-artifacts-without-registry.md) | Release OCI archives + SBOM + provenance; no registry |
+| [0012](0012-ai-stack.md) | Optional AI stack, and Python versions that follow it |
 
 To add one: copy the newest ADR, take the next number, set Status to *Proposed*, and open a PR. A decision that reverses an earlier one supersedes it; edit only the old ADR's Status line ("Superseded by ADR NNNN").

@@ -28,6 +28,8 @@ An exception is allowed only when a finding cannot be fixed yet **and** the risk
 
 Do not add a `trivy.yaml` or VEX file to suppress findings: the checker rejects them, because they would bypass this process.
 
+The same rules apply to **`.pip-audit-ignore`** (dependency audit). A new entry may say `expires: on-bootstrap`, which `mise run bootstrap` replaces with today + 90 days. Only the IDs listed there are passed to pip-audit, and only after the file passes the same checks. Projects generated with `ai_stack=chromadb` ship four such entries for ChromaDB's server-only advisories (ADR 0012).
+
 Undocumented and expired entries fail the build; negative controls in template CI prove that.
 
 ## Secrets

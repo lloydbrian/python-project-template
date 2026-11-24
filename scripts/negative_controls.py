@@ -228,6 +228,26 @@ CONTROLS = [
         marker="TRIVY_",
     ),
     Control(
+        "audit-exception-undated",
+        "a pip-audit exception that was never dated by bootstrap fails the audit pre-check",
+        "uv run python tools/check_scan_exceptions.py .pip-audit-ignore",
+        lambda p: (p / ".pip-audit-ignore").write_text(
+            "PYSEC-2026-1  # reason: test; owner: qa; expires: on-bootstrap\n"
+        ),
+        marker="not dated",
+    ),
+    Control(
+        "chroma-python-guard",
+        "ChromaDB with Python 3.15 is refused at question time (onnxruntime has no 3.15 wheels)",
+        "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"
+        " --data project_name=x --data ai_stack=chromadb --data python_version=3.15 . $(mktemp -d)/x",
+        lambda p: edit(
+            p / "copier.yml", "{% if ai_stack == 'chromadb' %}ChromaDB needs", "{% if false %}ChromaDB needs"
+        ),
+        marker="",
+        where="template",
+    ),
+    Control(
         "name-validator",
         "a project name that would break TOML/Python is refused at question time",
         "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"

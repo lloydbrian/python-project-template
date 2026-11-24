@@ -17,13 +17,14 @@
 - No GHCR or registry publishing.
 - Python 3.15 default; 3.14 and 3.13 offered (decided 2026-11-24, after confirming every dependency installs from wheels on 3.15).
 - Dependency floors at the latest releases, never below a security fix (2026-11-24).
+- Optional AI stack (2026-11-24): LanceDB + sentence-transformers (any Python) or ChromaDB (Python ≤3.14, onnxruntime has no 3.15 wheels), each with pdfplumber and Tavily; ChromaDB's server-only advisories handled as time-boxed exceptions (ADR 0012).
 - READMEs stay detailed: every tool and step carries its "why".
 
 ## Verification
 | Check | Result |
 |---|---|
-| Render + gates, 6 variants (lint, format, mypy strict, pytest + coverage, pip-audit, bandit, full-history gitleaks, image-stage simulation) on 3.15, 3.14, 3.13 | 6/6 PASS |
-| Negative controls | 20/20 caught |
+| Render + gates, 8 variants including both AI stacks (lint, format, mypy strict, pytest + coverage, pip-audit, bandit, full-history gitleaks, image-stage simulation) on 3.15, 3.14, 3.13 | 8/8 PASS |
+| Negative controls | 22/22 caught |
 | `copier update` test (template change arrives, local edit kept, computed ref moves, no conflicts) | PASS |
 | actionlint, root pre-commit, gitleaks, pin policy (actions + hooks by SHA, versions agree) | PASS |
 | Independent review: correctness, security, operability, docs accuracy | 2 critical (one reported by two reviewers, one found while fixing), 14 major, about 35 minor (unique): all fixed |

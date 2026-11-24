@@ -21,6 +21,9 @@ run = """
 [ -f uv.lock ] || uv lock
 uv sync
 uv run pre-commit install
+{%- if has_container %}
+uv run python tools/check_scan_exceptions.py --stamp .pip-audit-ignore
+{%- endif %}
 """
 
 [tasks.format]
@@ -42,7 +45,12 @@ run = "uv run pytest"
 [tasks.security]
 description = "Dependency audit and code security scan (fails on findings)"
 run = """
+{%- if has_container %}
+uv run python tools/check_scan_exceptions.py .pip-audit-ignore
+uv run --group security pip-audit $(uv run python tools/check_scan_exceptions.py --pip-audit-args .pip-audit-ignore)
+{%- else %}
 uv run --group security pip-audit
+{%- endif %}
 uv run --group security bandit -q -r src
 """
 {%- if has_container %}
@@ -111,7 +119,12 @@ uv sync --locked
 uv run pre-commit run --all-files
 uv run mypy
 uv run pytest -m "not live"
+{%- if has_container %}
+uv run python tools/check_scan_exceptions.py .pip-audit-ignore
+uv run --group security pip-audit $(uv run python tools/check_scan_exceptions.py --pip-audit-args .pip-audit-ignore)
+{%- else %}
 uv run --group security pip-audit
+{%- endif %}
 uv run --group security bandit -q -r src
 gitleaks git --redact --no-banner .
 """

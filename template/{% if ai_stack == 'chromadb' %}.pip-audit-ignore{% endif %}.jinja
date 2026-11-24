@@ -1,0 +1,14 @@
+# .pip-audit-ignore — time-boxed exceptions for `pip-audit` (same rules as .trivyignore; see SECURITY
+# in the template repo). One advisory per line:
+#   <ID>  # reason: <why not exploitable here>; owner: <name>; expires: YYYY-MM-DD (at most 90 days)
+# `mise run bootstrap` dates new entries ("expires: on-bootstrap") to today + 90 days; commit the
+# result. When an entry expires the audit fails: check for a chromadb release that fixes it, then
+# remove the line (or renew it with a fresh assessment).
+#
+# All four affect the ChromaDB *server*. This project uses only the embedded PersistentClient
+# (see src/{{ package_name }}/rag.py). If you ever run `chroma run` or expose Chroma over a network,
+# these exceptions no longer hold: delete them and switch to LanceDB or a fixed release.
+PYSEC-2026-311   # reason: pre-auth code injection in the Chroma server via a model repository with trust_remote_code. Embedded client only, no server; owner: {{ author_name }}; expires: on-bootstrap
+PYSEC-2026-3814  # reason: authenticated code injection in the Chroma server (same mechanism). Embedded client only, no server; owner: {{ author_name }}; expires: on-bootstrap
+PYSEC-2026-3815  # reason: server RBAC provider ignores tenant/database/collection scope. No server and no multi-tenancy; owner: {{ author_name }}; expires: on-bootstrap
+PYSEC-2026-3813  # reason: server lets authenticated users reach other tenants' collections. No server and no multi-tenancy; owner: {{ author_name }}; expires: on-bootstrap

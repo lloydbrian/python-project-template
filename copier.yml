@@ -11,7 +11,7 @@ _answers_file: .copier-answers.yml
 _templates_suffix: .jinja
 _message_after_copy: |
 
-  Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}).
+  Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}{% if ai_stack != 'none' %}, AI stack: {{ ai_stack }}{% endif %}).
 
   Next steps (details in README.md):
     1. cd {{ _copier_conf.dst_path }} && git init
@@ -75,14 +75,32 @@ author_name:
   default: Lloyd D.
   validator: "{% if '\"' in author_name or '\\\\' in author_name or '\\n' in author_name %}Avoid double quotes, backslashes and line breaks{% endif %}"
 
+ai_stack:
+  type: str
+  help: >-
+    AI retrieval stack: a vector store with local embeddings (all-MiniLM-L6-v2), PDF text
+    extraction (pdfplumber) and web search (Tavily). It also decides the Python versions
+    offered next: ChromaDB needs onnxruntime, which has no Python 3.15 wheels yet.
+  choices:
+    None: none
+    LanceDB + sentence-transformers (any Python, including 3.15): lancedb
+    ChromaDB with its built-in embedder (Python 3.14 or older): chromadb
+  default: none
+  when: "{{ project_type in ['service', 'notebooks'] }}"
+
 python_version:
   type: str
   help: Python version (one answer drives mise, requires-python, the base image and ruff/mypy targets)
+  # A choice disabled by its validator is shown greyed out with the reason, and refused with --data.
   choices:
-    - "3.15"
-    - "3.14"
-    - "3.13"
-  default: "3.15"
+    "3.15":
+      value: "3.15"
+      validator: >-
+        {% if ai_stack == 'chromadb' %}ChromaDB needs onnxruntime, which has no Python 3.15
+        wheels yet: pick 3.14, or choose LanceDB as the AI stack{% endif %}
+    "3.14": "3.14"
+    "3.13": "3.13"
+  default: "{{ '3.14' if ai_stack == 'chromadb' else '3.15' }}"
 
 github_owner:
   type: str

@@ -34,7 +34,7 @@ run = "python3 scripts/render.py"
 [tasks.render-all]
 description = "Render and gate every variant (no container stages unless REQUIRE_CONTAINER=1)"
 run = """
-for v in service library library-container notebooks service-py314 service-py313; do
+for v in service library library-container notebooks service-ai-lancedb notebooks-ai-chromadb service-py314 service-py313; do
   python3 scripts/render.py "$v"
 done
 """

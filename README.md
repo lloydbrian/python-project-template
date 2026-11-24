@@ -87,6 +87,7 @@ copier copy --vcs-ref v2.0.0 --defaults \
 | **CI** | Gates + image test, scan, SBOM, **smoke test** | Gates (+ image steps if containerised) | Gates + image test, scan, SBOM |
 | **Release** | amd64/arm64 OCI archives + SBOM + provenance | Same, if containerised | Same |
 | **Notebook hygiene** | — | — | nbstripout, nbQA |
+| **AI stack (optional)** | LanceDB or ChromaDB, local embeddings, pdfplumber, Tavily | — | Same choice |
 
 All three share the same toolchain, the same gates and the same upgrade path.
 
@@ -104,7 +105,8 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | `package_name` | always | slug with `_`, e.g. `ticket_triage` | Python import package under `src/` |
 | `description` | always | the project name | `pyproject.toml` and README |
 | `author_name` | always | `Lloyd D.` | `pyproject.toml` authors |
-| `python_version` | always | `3.15` | One value for mise, `requires-python`, the base image, ruff `target-version` and mypy `python_version`. Choices `3.15`, `3.14`, `3.13`: pick an older one only for a dependency that has no wheels for the newer version yet (for example onnxruntime, which has none for 3.15 as of November 2026) |
+| `ai_stack` | service, notebooks | `none` | `lancedb` (LanceDB + sentence-transformers, any Python) or `chromadb` (ChromaDB + built-in embedder, Python 3.14 or older), each with pdfplumber and Tavily. Asked before `python_version` because it limits it ([ADR 0012](docs/adr/0012-ai-stack.md)) |
+| `python_version` | always | `3.15` (`3.14` with ChromaDB) | One value for mise, `requires-python`, the base image, ruff `target-version` and mypy `python_version`. Choices `3.15`, `3.14`, `3.13`. With `ai_stack=chromadb`, 3.15 is shown disabled with the reason: onnxruntime, which ChromaDB always installs, has no 3.15 wheels yet |
 | `github_owner` | always | `lloydbrian` | Where the project's CI finds the shared workflow |
 | `coverage_threshold` | always | `80` | `fail_under` for pytest-cov |
 | `license` | always | `Proprietary` | `Proprietary` writes no LICENSE file; `MIT` and `Apache-2.0` write the full text |
@@ -198,10 +200,11 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Code security | `bandit` | Insecure patterns in `src/` |
 | Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is not copied by the Containerfile, is excluded by `.containerignore`, or a `license-files` entry is missing |
 | Image tests | `podman build --target test` | Tests fail inside the image |
+| Dependency audit exceptions | `.pip-audit-ignore` (+ exception checker) | An undocumented, undated, expired or over-90-day entry; only listed IDs are ever ignored |
 | Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`, VEX file or `TRIVY_*` setting in `.mise.toml` that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 20 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, and the project-name validator. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 22 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, and the project-name validator. A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -248,7 +251,8 @@ Every generated project ships with these gates, and every gate exits non-zero on
                                          .github/workflows/template-ci.yml   (this repo's own CI)
                                              lint (hooks, actionlint, pins, nothing ignored)
                                              render matrix: service, library, library-container,
-                                               notebooks, service-py314, service-py313 (each runs its own gates,
+                                               notebooks, service-ai-lancedb, notebooks-ai-chromadb,
+                                               service-py314, service-py313 (each runs its own gates,
                                                the image-context simulation, and with
                                                REQUIRE_CONTAINER=1 image build, scan and smoke)
                                              negative controls · copier update test
@@ -397,6 +401,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 | [0009](docs/adr/0009-reusable-ci-workflow.md) | Projects call one versioned, reusable workflow |
 | [0010](docs/adr/0010-service-runtime-baseline.md) | Service baseline: factory, health endpoints, request ID, JSON logs, typed settings |
 | [0011](docs/adr/0011-release-artifacts-without-registry.md) | Release OCI archives + SBOM + provenance; no registry |
+| [0012](docs/adr/0012-ai-stack.md) | Optional AI stack: LanceDB (any Python) or ChromaDB (≤3.14), local embeddings, pdfplumber, Tavily |
 
 ---
 
@@ -413,7 +418,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 20 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | 22 negative controls in template CI |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 26 LTS (no Corepack: Node 25+ dropped it), Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |

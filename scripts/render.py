@@ -35,6 +35,14 @@ VARIANTS: dict[str, dict[str, object]] = {
         "license": "MIT",  # exercises LICENSE in the image build context
     },
     "notebooks": {"project_name": "Ref Notebooks", "project_type": "notebooks"},
+    # AI stacks: LanceDB on the default Python, ChromaDB on the newest Python it supports
+    "service-ai-lancedb": {"project_name": "Ref AI Service", "project_type": "service", "ai_stack": "lancedb"},
+    "notebooks-ai-chromadb": {
+        "project_name": "Ref AI Notebooks",
+        "project_type": "notebooks",
+        "ai_stack": "chromadb",
+        "python_version": "3.14",
+    },
     "service-py314": {
         "project_name": "Ref Service 314",
         "project_type": "service",
@@ -101,6 +109,12 @@ def check_tree(variant: str, data: dict[str, object], out: Path) -> None:
         expected.append(".container/compose.yaml")
     if ptype == "notebooks":
         expected.append("notebooks/README.md")
+    ai = data.get("ai_stack", "none")
+    pkg = str(data["project_name"]).lower().replace(" ", "_")
+    if ai != "none":
+        expected += [f"src/{pkg}/rag.py", f"src/{pkg}/web_search.py", "tests/test_rag.py", "tests/test_web_search.py"]
+    if ai == "chromadb":
+        expected.append(".pip-audit-ignore")
     missing = [f for f in expected if not (out / f).is_file()]
     unexpected = [f for f in CONTAINER if not has_container and (out / f).exists()]
     leftovers = []
@@ -143,13 +157,23 @@ def gates(data: dict[str, object], out: Path, runner: str) -> None:
     else:
         env["UV_PYTHON"] = str(data.get("python_version", "3.15"))
         group = " --group notebooks" if ptype == "notebooks" else ""
+        exceptions = "uv run python tools/check_scan_exceptions.py"
+        audit = (
+            [
+                f"{exceptions} --stamp .pip-audit-ignore",
+                f"{exceptions} .pip-audit-ignore",
+                f"uv run --group security pip-audit $({exceptions} --pip-audit-args .pip-audit-ignore)",
+            ]
+            if has_container
+            else ["uv run --group security pip-audit"]
+        )
         for cmd in (
             "uv lock -q",
             f"uv sync -q --locked{group}",
             "uv run pre-commit run --all-files",
             "uv run mypy",
             'uv run pytest -q -m "not live"',
-            "uv run --group security pip-audit",
+            *audit,
             "uv run --group security bandit -q -r src",
             "gitleaks git --redact --no-banner .",
         ):

@@ -24,6 +24,9 @@
 {%- if nb %}
 [Notebooks](#working-with-notebooks) ·
 {%- endif %}
+{%- if ai_stack != 'none' %}
+[AI stack](#ai-stack) ·
+{%- endif %}
 {%- if has_container %}
 [Containers](#containers-podman) ·
 [Vulnerabilities](#vulnerability-scanning-and-exceptions) ·
@@ -127,7 +130,7 @@ Run `mise tasks` to list them. Every task exits non-zero on failure, so it can g
 
 | Task | What it does | When to run it |
 |---|---|---|
-| `mise run bootstrap` | `uv lock` if there is no lockfile, `uv sync`{% if nb %} (dev and notebooks groups, the defaults here){% endif %}, install git hooks | Once per clone, and after `copier update` |
+| `mise run bootstrap` | `uv lock` if there is no lockfile, `uv sync`{% if nb %} (dev and notebooks groups, the defaults here){% endif %}, install git hooks{% if has_container %}, date any new `.pip-audit-ignore` entries{% endif %} | Once per clone, and after `copier update` |
 | `mise run format` | `ruff format .` | Any time (also runs on commit) |
 | `mise run lint` | `ruff check .` | While coding |
 | `mise run type` | `mypy` in strict mode | While coding |
@@ -194,6 +197,9 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 {%- if has_container %}
 ├── .containerignore       keeps .git, .venv, secrets and caches out of the build context
 ├── .trivyignore           time-boxed vulnerability exceptions (empty by default)
+{%- if ai_stack == 'chromadb' %}
+├── .pip-audit-ignore      time-boxed exceptions for ChromaDB's server-only advisories
+{%- endif %}
 {%- endif %}
 ├── pyproject.toml         metadata, dependencies, groups, ruff/mypy/pytest/coverage config
 ├── uv.lock                exact versions (committed)
@@ -211,16 +217,20 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 {%- if svc %}
 │   ├── config.py          typed Settings; fails fast on bad values
 │   ├── logging_config.py  JSON logs with request ID
-│   └── main.py            create_app() factory, health endpoints, request-ID middleware
+│   {% if ai_stack != 'none' %}├──{% else %}└──{% endif %} main.py            create_app() factory, health endpoints, request-ID middleware
 {%- elif lib %}
 │   ├── core.py            the library's public functions
 │   └── py.typed           tells type checkers this package ships types (PEP 561)
 {%- else %}
-│   └── helpers.py         tested helpers that notebooks import
+│   {% if ai_stack != 'none' %}├──{% else %}└──{% endif %} helpers.py         tested helpers that notebooks import
+{%- endif %}
+{%- if ai_stack != 'none' %}
+│   ├── rag.py             DocumentStore ({{ 'LanceDB' if ai_stack == 'lancedb' else 'ChromaDB' }}), chunk_text, pdf_text
+│   └── web_search.py      Tavily web search (key from TAVILY_API_KEY)
 {%- endif %}
 ├── tests/
 {%- if has_container %}
-└── tools/check_scan_exceptions.py   rejects undocumented or expired .trivyignore entries
+└── tools/check_scan_exceptions.py   rejects undocumented or expired .trivyignore{% if ai_stack == 'chromadb' %}/.pip-audit-ignore{% endif %} entries
 {%- endif %}
 ```
 
@@ -336,6 +346,67 @@ podman compose -f .container/compose.yaml up     # or in a container on 127.0.0.
 - Outputs are stripped on commit (nbstripout) and notebook code is linted (nbQA + ruff).
 - Keep data in `data/` (git-ignored). Never paste keys or personal data into cells: outputs are stripped, but source cells are committed.
 - Optional extras for rendering and graphs: `brew install pandoc graphviz`; the `docs` extra adds the Python side (`uv sync --extra docs`).
+{%- endif %}
+
+{%- if ai_stack != 'none' %}
+
+---
+
+## AI stack
+
+This project was generated with **{{ 'LanceDB + sentence-transformers' if ai_stack == 'lancedb' else 'ChromaDB with its built-in embedder' }}**, plus pdfplumber for PDFs and Tavily for web search. The code is in `src/{{ package_name }}/rag.py` and `web_search.py`; the tests run offline.
+
+| Piece | Where | Why this one |
+|---|---|---|
+{%- if ai_stack == 'lancedb' %}
+| **Vector store: LanceDB** | `rag.DocumentStore` | Embedded: files under `data/vectors`, no server to run or secure. Its index lives on disk, so it handles data larger than memory, and it installs from wheels on every offered Python, including 3.15 (template ADR 0012) |
+| **Embeddings: sentence-transformers** | `rag.default_embedder()` | Runs all-MiniLM-L6-v2 locally on the CPU through LanceDB's embedding registry: no API key, no per-call cost, and text never leaves the machine |
+{%- else %}
+| **Vector store: ChromaDB** | `rag.DocumentStore` | The simplest API: you add and query plain strings, and its built-in embedder does the rest. Embedded `PersistentClient` only, with files under `data/vectors` and no server (template ADR 0012) |
+| **Embeddings: Chroma's built-in model** | Chroma's `DefaultEmbeddingFunction` | all-MiniLM-L6-v2 through onnxruntime on the CPU: no API key, no per-call cost, and text never leaves the machine |
+{%- endif %}
+| **Chunking** | `rag.chunk_text()` | The model reads at most 256 tokens and silently drops the rest. 180-word windows with a 30-word overlap stay under that limit and keep context across chunk edges |
+| **PDF text: pdfplumber** | `rag.pdf_text()` | MIT-licensed, keeps reading order, handles tables. PyMuPDF was avoided because of its AGPL licence |
+| **Web search: Tavily** | `web_search.search_web()` | Returns cleaned page extracts sized for an LLM prompt. The key comes from `TAVILY_API_KEY`{% if svc %} (`Settings.tavily_api_key`, a `SecretStr`){% endif %} |
+
+**Use it:**
+
+```python
+from {{ package_name }}.rag import DocumentStore, chunk_text, pdf_text
+
+store = DocumentStore("data/vectors")
+store.add(chunk_text(pdf_text("report.pdf")))
+for hit in store.search("What changed in Q3?", k=3):
+    print(f"{hit.distance:.3f}  {hit.text[:80]}")
+```
+
+**The embedding model** (all-MiniLM-L6-v2, 384 dimensions, English-focused):
+
+- The first use downloads it (about 80 MB) {% if ai_stack == 'lancedb' %}from Hugging Face into `~/.cache/huggingface`{% else %}from Chroma's model bucket into `~/.cache/chroma/onnx_models` (checked against a SHA-256){% endif %}. After that it works offline.
+- Container images **bake the model in** at build time, as the `app` user, and set `HF_HUB_OFFLINE=1`. Containers never download anything, so they start offline with a read-only root filesystem. Only the image build needs network access.
+{%- if ai_stack == 'lancedb' %}
+- sentence-transformers depends on PyTorch, so installs and images are large: the torch wheel alone is about 140 MB on macOS and 540 MB on Linux.
+- To change model or provider, edit `default_embedder()`. LanceDB's registry also has `openai`, `voyageai`, `ollama` and `huggingface` embedders. Every store keeps the model it was created with, so re-index after changing it.
+{%- else %}
+- Chroma's anonymous usage telemetry is switched off in `DocumentStore` (and `ANONYMIZED_TELEMETRY=False` in images).
+{%- endif %}
+- Tests use a deterministic fake embedder and never download a model. `uv run pytest -m live` exercises the real model and, with `TAVILY_API_KEY` set, real web search.
+
+**Secrets:** put `TAVILY_API_KEY` in `.env.dev` locally (git-ignored). In a container, pass it as a Podman secret (see [Configuration and secrets](#configuration-and-secrets)). Never put it in `.env.example`, code or a notebook cell.
+{%- if ai_stack == 'chromadb' %}
+
+**Why Python {{ python_version }} and not 3.15:** ChromaDB always installs onnxruntime to run its built-in model, and onnxruntime has no Python 3.15 wheels yet (it publishes no source package to build from). The template therefore refuses ChromaDB with 3.15. Two ways forward:
+
+1. **Switch to LanceDB.** Replace `DocumentStore` in `rag.py` (the template's LanceDB version has the same `add`/`search` interface), swap `chromadb` for `lancedb` and `sentence-transformers` in `pyproject.toml`, then re-index. The model is the same, so search results stay comparable.
+2. **Wait for onnxruntime.** Once a template release lifts the restriction, run `copier update --data python_version=3.15`.
+
+**Audit exceptions (`.pip-audit-ignore`):** ChromaDB has four published advisories with no fixed release. All of them affect the **ChromaDB server**: code injection through model repositories, and tenant authorization. This project uses only the embedded client, so they are recorded as time-boxed exceptions instead of failing every audit:
+
+- `mise run bootstrap` dates each new entry to today + 90 days. Commit the result.
+- `mise run security` and `mise run ci` validate the file, then ignore **only** those IDs. Any other finding still fails.
+- When an entry expires, the audit fails. Check whether a newer chromadb fixes it (`uv lock --upgrade-package chromadb`), then delete the line, or renew it with a fresh assessment and a new date.
+- **Never run ChromaDB as a server** (`chroma run`, or exposing it on a network). The exceptions would no longer be true: delete them and move to LanceDB or a fixed release.
+{%- endif %}
 {%- endif %}
 
 {%- if has_container %}
@@ -505,6 +576,14 @@ mise run bootstrap && mise run ci
 | `trivy` fails with expired or undocumented exceptions | Fix the finding or renew the `.trivyignore` entry with a new reason, owner and expiry |
 | VS Code dev container tries to use Docker | In your **user** settings set `"dev.containers.dockerPath": "podman"` |
 | `scan`: "trivy config files are not allowed" | Remove `trivy.yaml` or VEX files; record exceptions in `.trivyignore` instead |
+{%- if ai_stack == "chromadb" %}
+| `security`: "... is not dated yet; run `mise run bootstrap`" | New `.pip-audit-ignore` entries are dated on first bootstrap: run it and commit the file |
+| `security`: "PYSEC-... expired on ..." | Check for a fixed chromadb (`uv lock --upgrade-package chromadb`); delete the line if fixed, or renew it with a new assessment and date |
+{%- endif %}
+{%- if ai_stack != "none" %}
+| Container: "We couldn't connect to huggingface.co" or offline-mode errors | The model was not baked in: rebuild the image with network access (`mise run image`); the build downloads it once |
+| Slow first `DocumentStore()` locally | First use downloads the embedding model (about 80 MB); later runs use the cache |
+{%- endif %}
 {%- endif %}
 {%- if nb %}
 | Notebook cannot import `{{ package_name }}` | Select the **{{ kernel_display_name }}** kernel; run `mise run kernel` if it is missing |

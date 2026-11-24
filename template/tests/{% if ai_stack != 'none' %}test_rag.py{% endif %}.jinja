@@ -1,0 +1,155 @@
+"""DocumentStore, chunking and PDF extraction. Offline: a deterministic fake embedder stands in
+for the real model, which only the `live` test downloads."""
+
+from __future__ import annotations
+
+import hashlib
+import math
+from pathlib import Path
+
+import pytest
+{%- if ai_stack == "lancedb" %}
+from lancedb.embeddings import TextEmbeddingFunction, get_registry, register
+{%- else %}
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+{%- endif %}
+
+from {{ package_name }}.rag import DocumentStore, chunk_text, pdf_text
+
+DIMS = 32
+
+
+def _vector(text: str) -> list[float]:
+    """Bag-of-words hashing: texts sharing words get similar vectors."""
+    v = [0.0] * DIMS
+    for word in text.lower().split():
+        v[int(hashlib.sha256(word.encode()).hexdigest(), 16) % DIMS] += 1.0
+    norm = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / norm for x in v]
+
+{%- if ai_stack == "lancedb" %}
+
+
+@register("test-hash-embeddings")
+class HashEmbeddings(TextEmbeddingFunction):
+    def ndims(self) -> int:
+        return DIMS
+
+    def generate_embeddings(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
+        return [_vector(t) for t in texts]
+
+
+def _store(path: Path) -> DocumentStore:
+    return DocumentStore(path, embedder=get_registry().get("test-hash-embeddings").create())
+{%- else %}
+
+
+class HashEmbeddings(EmbeddingFunction[Documents]):
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, input: Documents) -> Embeddings:
+        import numpy as np
+
+        return [np.array(_vector(t), dtype=np.float32) for t in input]
+
+    @staticmethod
+    def name() -> str:
+        return "test-hash-embeddings"
+
+    def get_config(self) -> dict[str, object]:
+        return {}
+
+    @staticmethod
+    def build_from_config(config: dict[str, object]) -> HashEmbeddings:
+        return HashEmbeddings()
+
+
+def _store(path: Path) -> DocumentStore:
+    return DocumentStore(path, embedder=HashEmbeddings())
+{%- endif %}
+
+
+TEXTS = [
+    "apples and pears are fruit",
+    "rust compiler error messages",
+    "tennis serve practice drills",
+]
+
+
+def test_search_returns_the_closest_text(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.add(TEXTS)
+    hits = store.search("pears and apples", k=2)
+    assert hits[0].text == TEXTS[0]
+    assert hits[0].distance <= hits[1].distance
+
+
+def test_add_returns_ids_and_persists(tmp_path: Path) -> None:
+    ids = _store(tmp_path).add(TEXTS[:2], ids=["a", "b"])
+    assert ids == ["a", "b"]
+    reopened = _store(tmp_path)
+    assert reopened.count() == 2
+    assert reopened.search("rust compiler", k=1)[0].id == "b"
+
+
+def test_generated_ids_are_unique(tmp_path: Path) -> None:
+    ids = _store(tmp_path).add(TEXTS)
+    assert len(set(ids)) == 3
+
+
+def test_mismatched_ids_are_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        _store(tmp_path).add(TEXTS, ids=["only-one"])
+
+
+def test_chunk_text_overlaps_and_respects_limit() -> None:
+    words = [f"w{i}" for i in range(400)]
+    chunks = chunk_text(" ".join(words), max_words=180, overlap=30)
+    assert all(len(c.split()) <= 180 for c in chunks)
+    assert chunks[1].split()[0] == "w150"  # 30-word overlap with the first chunk
+    assert chunks[-1].split()[-1] == "w399"
+    assert chunk_text("short text") == ["short text"]
+
+
+def test_chunk_text_rejects_bad_window() -> None:
+    with pytest.raises(ValueError):
+        chunk_text("x", max_words=10, overlap=10)
+
+
+def _minimal_pdf(text: str) -> bytes:
+    """A valid one-page PDF with one line of Helvetica text, built by hand (no extra deps)."""
+    stream = f"BT /F1 18 Tf 20 100 Td ({text}) Tj ET".encode()
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R"
+        b" /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for n, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{n} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    return bytes(out)
+
+
+def test_pdf_text_extracts_page_text(tmp_path: Path) -> None:
+    pdf = tmp_path / "hello.pdf"
+    pdf.write_bytes(_minimal_pdf("Quarterly churn fell"))
+    assert "Quarterly churn fell" in pdf_text(pdf)
+
+
+@pytest.mark.live
+def test_real_embedding_model_ranks_meaning(tmp_path: Path) -> None:
+    """Downloads all-MiniLM-L6-v2 (about 80 MB) on first run: `uv run pytest -m live`."""
+    store = DocumentStore(tmp_path)
+    store.add(["The cat sat on the mat", "Quarterly revenue grew 12 percent"])
+    assert "revenue" in store.search("company earnings", k=1)[0].text

@@ -42,6 +42,20 @@ dependencies = [
   # Command-line entry point
   "typer>=0.29",
 {%- endif %}
+{%- if ai_stack == "lancedb" %}
+  # AI retrieval stack (README "AI stack"): embedded vector store + local embeddings
+  "lancedb>=0.41",
+  "sentence-transformers>=6.3",
+{%- elif ai_stack == "chromadb" %}
+  # AI retrieval stack (README "AI stack"): embedded vector store with its built-in embedder.
+  # Pinned to Python <=3.14 by copier.yml: its onnxruntime dependency has no 3.15 wheels yet.
+  "chromadb>=1.5.9",
+{%- endif %}
+{%- if ai_stack != "none" %}
+  # PDF text and tables; web search for retrieval-augmented answers
+  "pdfplumber>=0.11.11",
+  "tavily-python>=0.8.5",
+{%- endif %}
 ]
 {%- if project_type != "notebooks" %}
 
@@ -117,6 +131,12 @@ mypy_path = "src"
 warn_unused_configs = true
 {%- if project_type == "service" %}
 plugins = ["pydantic.mypy"]
+{%- endif %}
+{%- if ai_stack != "none" %}
+
+[[tool.mypy.overrides]]               # these libraries ship without type information
+module = ["pdfplumber.*", "tavily.*"]
+ignore_missing_imports = true
 {%- endif %}
 
 [tool.pytest.ini_options]

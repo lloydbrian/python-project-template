@@ -78,16 +78,18 @@ PY
 
 ```bash
 mise trust && mise install
-mise run template-ci                                   # lint, 6 variants, 20 negative controls, update test
+mise run template-ci                                   # lint, 8 variants, 22 negative controls, update test
 REQUIRE_CONTAINER=1 mise run render-test -- service    # image test stage, build, scan, SBOM, smoke
 REQUIRE_CONTAINER=1 mise run render-test -- notebooks
 REQUIRE_CONTAINER=1 mise run render-test -- service-py313   # oldest supported Python
+REQUIRE_CONTAINER=1 mise run render-test -- service-ai-lancedb     # bakes the embedding model: needs network, large image
+REQUIRE_CONTAINER=1 mise run render-test -- notebooks-ai-chromadb
 ```
 
 **Expect:**
-- `render-test <variant>: PASS` for all six variants;
+- `render-test <variant>: PASS` for all eight variants;
 - every container variant prints `image_sim: target test: PASS`;
-- `negative controls: 20/20 caught`;
+- `negative controls: 22/22 caught`;
 - `update-test: ... PASS`;
 - with `REQUIRE_CONTAINER=1`: `smoke: OK`, and trivy exits 0.
 
@@ -302,5 +304,5 @@ cd "$REF" && git switch -c chore/template-v2.0.0 && copier update --vcs-ref v2.0
 After step 10, append to `docs/RELEASES.md`:
 
 ```text
-2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 6/6 variants, 20/20 controls, update PASS
+2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 8/8 variants, 22/22 controls, update PASS
 ```

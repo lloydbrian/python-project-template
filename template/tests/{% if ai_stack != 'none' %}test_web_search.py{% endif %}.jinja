@@ -1,0 +1,60 @@
+"""Web search wrapper. Offline: the Tavily client is replaced; only the `live` test calls it."""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+import pytest
+
+from {{ package_name }} import web_search
+from {{ package_name }}.web_search import MissingApiKeyError, search_web
+
+
+class FakeTavily:
+    last_key: str | None = None
+
+    def __init__(self, api_key: str) -> None:
+        FakeTavily.last_key = api_key
+
+    def search(self, query: str, max_results: int) -> dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "title": f"About {query}",
+                    "url": "https://example.invalid/a",
+                    "content": "x",
+                    "score": 0.9,
+                }
+            ][:max_results]
+        }
+
+
+def test_missing_key_fails_clearly(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    with pytest.raises(MissingApiKeyError, match="TAVILY_API_KEY"):
+        search_web("anything")
+
+
+def test_results_are_mapped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(web_search, "TavilyClient", FakeTavily)
+    monkeypatch.setenv("TAVILY_API_KEY", "test-key-from-env")
+    results = search_web("podman", max_results=1)
+    assert results[0].title == "About podman"
+    assert results[0].score == pytest.approx(0.9)
+    assert FakeTavily.last_key == "test-key-from-env"
+
+
+def test_explicit_key_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(web_search, "TavilyClient", FakeTavily)
+    monkeypatch.setenv("TAVILY_API_KEY", "from-env")
+    search_web("q", api_key="explicit")
+    assert FakeTavily.last_key == "explicit"
+
+
+@pytest.mark.live
+def test_real_search() -> None:
+    """Needs TAVILY_API_KEY: `uv run pytest -m live`."""
+    if not os.environ.get("TAVILY_API_KEY"):
+        pytest.skip("TAVILY_API_KEY not set")
+    assert search_web("Python 3.15 release", max_results=1)

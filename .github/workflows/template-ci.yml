@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [service, library, library-container, notebooks, service-py314, service-py313]
+        variant: [service, library, library-container, notebooks, service-ai-lancedb, notebooks-ai-chromadb, service-py314, service-py313]
     env:
       REQUIRE_CONTAINER: "1"   # in CI the image must build, scan and (services) smoke-test
     steps:
