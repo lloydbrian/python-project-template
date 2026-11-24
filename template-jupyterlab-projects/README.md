@@ -1,253 +1,151 @@
-# JupyterLab + VS Code Hybrid (Professional) Setup Guide (macOS + uv)
+# JupyterLab + VS Code Hybrid Template (Python 3.14, Podman)
 
-This guide defines a **portable, reusable, per-repo** development setup optimized for:
-- **JupyterLab-first exploration** (browser)
-- **VS Code for engineering** (src/, tests, packaging, Git, CI)
-- **uv + lockfile** for fast, deterministic installs
-- Optional **Docker** scaffolding for container-first workflows
+A portable, per-repo setup for **JupyterLab-first exploration** with **VS Code for engineering** (`src/`, tests, packaging, git, CI). Same toolchain as the Python template: mise + uv + ruff + mypy + pytest + pre-commit, plus notebook hygiene (nbstripout, nbQA).
 
-> **Multi-root workspace note:** If you have multiple repos under a parent folder, each repo should have its own `.venv` and its own `.vscode/settings.json` so the interpreter never “flips” on restart.
+> **Multi-root workspaces:** each repo keeps its own `.venv` and `.vscode/settings.json`, so the interpreter never "flips" on restart.
 
----
+## Set-up (once per machine)
 
-## SET-UP
-
-### A. One-time prerequisites (host or container base)
-
-#### 1) Python runtime strategy
-Choose one:
-- **Local-first:** Use `mise` to manage per-repo Python versions.
-- **Container-first:** Pin Python in the container base image; still use `uv` + `.venv` per repo for isolation.
-
-#### 2) Install Homebrew packages
+### 1. Homebrew packages
 ```bash
-brew update
-brew upgrade
-brew cleanup -s
-brew doctor
-
-brew install colima
-brew install docker docker-compose
-
-brew install git gh wget jq tree ripgrep fd fzf bat
-brew install coreutils gnu-sed
+brew update && brew upgrade && brew cleanup -s && brew doctor
+brew install mise uv pre-commit git gh podman podman-compose trivy
+brew install ripgrep fd fzf jq bat tree coreutils gnu-sed
 brew install openssl readline zlib sqlite
-
-brew install zsh-autosuggestions zsh-syntax-highlighting starship
-
-brew install mise
-echo 'eval "$(mise activate zsh)"' >>~/.zshrc
-source ~/.zshrc
-
-brew install uv
-brew install pre-commit
-
-# Useful for Jupyter/data workflows (optional but common)
-brew install pandoc
-brew install graphviz
-
 brew install --cask visual-studio-code --appdir=~/Applications
-
-brew doctor
-brew cleanup -s
+echo 'eval "$(mise activate zsh)"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-#### 3) VS Code extensions (hybrid pro setup)
-Install these because VS Code is your “engineering layer” even if notebooks run in JupyterLab:
-- Python
-- Pylance
-- Jupyter
-- Python Debugger
-- Dev Containers (only if you use container-first dev)
-- Even Better TOML
-- GitHub Copilot Chat (optional)
-- GitHub Theme (optional)
+| Tool | Why |
+|---|---|
+| `mise` | Pins the Python version per repo and runs every quality gate as a task |
+| `uv` | Fast replacement for pip, venv, pipx and poetry: environments, resolution, lockfile |
+| `pre-commit` | Runs format, lint and secret checks before every commit |
+| `podman` + `podman-compose` | Rootless, daemonless containers with a Docker-compatible CLI |
+| `trivy` | Scans container images and dependencies for known vulnerabilities |
+| `gh` | GitHub from the terminal: clone, PRs, CI status |
+| `rg`, `fd`, `fzf`, `jq`, `bat`, `tree` | Search code, find files, fuzzy-pick, filter JSON, read files, view folders |
 
-If you also do Java in this same workspace:
-- Extension Pack for Java
-- Debugger for Java
-
----
-
-## INITIALIZATION (Reusable Steps)
-
-### Project repository initialization (JupyterLab + VS Code Hybrid)
-
-#### 1) Create project folder and standard directories/files
+### 2. Podman machine (macOS runs containers in a small Linux VM)
 ```bash
-mkdir my-jupyter-ai-project
-cd my-jupyter-ai-project
-
-mkdir -p src tests notebooks data docs
-touch README.md
+podman machine init && podman machine start     # once; afterwards `podman machine start` after a reboot
+podman info --format '{{.Host.Security.Rootless}}'   # true = rootless
 ```
+Optional: `brew install --cask podman-desktop` for a GUI. For VS Code Dev Containers, add to your **user** settings: `"dev.containers.dockerPath": "podman"`.
 
-#### 2) Add `pyproject.toml` (root)
-Your `pyproject.toml` should include:
-- `[project].dependencies` for runtime libraries
-- `[project.optional-dependencies].dev` for ruff/pytest/pre-commit/etc.
-- `[project.optional-dependencies].jupyter` for `jupyterlab`, `ipykernel`, notebook tooling
-
-#### 3) Add `.pre-commit-config.yaml` (root)
-Place it at the repo root (same level as `.git/`, `pyproject.toml`, `README.md`).
-
-#### 4) Add `.gitignore` (root)
-Minimum notebook-related ignores:
-```gitignore
-.venv/
-.env
-__pycache__/
-.ipynb_checkpoints/
-data/
-dist/
-build/
-*.egg-info/
-```
-
-#### 5) Create uv environment and pin VS Code interpreter (per repo)
+### 3. Terminal (optional)
 ```bash
-uv venv
-mkdir -p .vscode
-touch .vscode/settings.json
+brew install zsh-autosuggestions zsh-syntax-highlighting starship
+brew install --cask font-jetbrains-mono-nerd-font iterm2 --appdir=~/Applications
+cp ../template-terminal/starship.toml ~/.config/starship.toml
+cat ../template-terminal/starship_zsh_integration.zsh >> ~/.zshrc && source ~/.zshrc
 ```
+Set the terminal font to **JetBrainsMono Nerd Font** (Terminal.app: Settings > Profiles > Font; iTerm2: Profiles > Text).
 
-Edit `.vscode/settings.json`:
-```json
-{
- "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
- "python.terminal.activateEnvironment": true
-}
-```
+### 4. VS Code extensions
+Python, Pylance, Python Debugger, Ruff, Jupyter, Dev Containers, Even Better TOML. Optional: GitHub Copilot Chat, GitHub Theme. For Java in the same workspace: Extension Pack for Java, Debugger for Java.
 
-> **Multi-root workspace:** Put this file inside **each repo folder**, not only the parent folder.
+Notebook extras (optional): `brew install pandoc graphviz`.
 
-#### 6) Create `.env` (root) for env-specific parameters (do not commit)
+## Initialization (once per project)
+
+1. **Create the repo and copy the template**:
+   ```bash
+   mkdir my-jupyter-ai-project && cd my-jupyter-ai-project && git init
+   cp -R ../template-repo-files/template-jupyterlab-projects/. .
+   mkdir -p data docs
+   ```
+2. **Rename** `jupyter-ai-labs` / `labs` in `pyproject.toml`, `src/labs/`, `tests/` and the kernel name in `.mise.toml`.
+3. **Pin Python and bootstrap**: `mise trust && mise install && mise run bootstrap`
+4. **Register the kernel** (JupyterLab and VS Code then use the same environment): `mise run kernel`
+5. **Environment files**: `cp .env.example .env.dev`
+6. **Check and commit**: `mise run ci && git add -A && git commit -m "chore: initial scaffold"`
+
+## Day to day
 ```bash
-touch .env
+mise run lab                 # JupyterLab with this repo's environment
+uv run jupyter lab --ip 0.0.0.0 --port 8888 --no-browser    # inside a container
 ```
+- Pick the **Python (jupyter-ai-labs)** kernel.
+- Keep reusable logic in `src/labs/` with tests; notebooks import it (`%load_ext autoreload`, `%autoreload 2`).
+- Before sharing: *Restart Kernel and Run All Cells*.
+- Outputs are stripped on commit (nbstripout) and notebook code is linted (nbQA + ruff).
+- Keep `data/` out of git (ignored) and never paste keys or personal data into cells.
 
-#### 7) Bootstrap dependencies (first-time)
-Since initialization assumes no `uv.lock` yet:
-```bash
-uv lock
-uv sync --dev #--extra jupyter
-```
+## Tasks
 
-#### 8) Register a Jupyter kernel for this repo (recommended)
-This ensures JupyterLab and VS Code can both select the exact environment:
-```bash
-uv run python -m ipykernel install --user \
-  --name my-jupyter-ai-project \
-  --display-name "Python (my-jupyter-ai-project)"
-```
+| Task | What it does |
+|---|---|
+| `mise run bootstrap` | Create `.venv`, lock if needed, install deps and pre-commit hooks (once per clone) |
+| `mise run format` | Format with ruff |
+| `mise run lint` | Lint with ruff (fails on issues) |
+| `mise run type` | Type-check with mypy (strict) |
+| `mise run test` | Tests with coverage (fails under 80%) |
+| `mise run security` | `pip-audit` + `bandit` (fails on findings) |
+| `mise run image` | Build the production image with Podman |
+| `mise run scan` | Scan the image with trivy (fails on HIGH/CRITICAL) |
+| `mise run lab` | Start JupyterLab |\n| `mise run kernel` | Register this repo's Jupyter kernel |\n| `mise run ci` | Exactly what CI runs: locked sync, all hooks, types, tests |
 
-#### 9) Initialize Git (or clone)
-Fresh repo:
-```bash
-git init
-git add -A
-git commit -m "chore: initial scaffold"
-```
+## Layout
 
-Or clone:
-```bash
-gh repo clone <org>/<repo>
-cd <repo>
-```
-
-#### 10) Install pre-commit hooks
-```bash
-uv run pre-commit install
-uv run pre-commit run --all-files
-```
-
-#### 11) Add minimum Docker folder/files (optional but aligned with portability)
-```bash
-mkdir -p .docker
-touch .docker/docker-compose.yaml
-touch .docker/Dockerfile.dev
-touch .docker/Dockerfile.prod  #can also be Dockerfile.runtime
-```
-
-#### 12) Resulting structure
 ```text
-repo/
-  .devcontainer/
-  .docker/
-  .git/
-  .vscode/
-  .venv/
-  .env
-  .gitignore
-  .mise.toml
-  .pre-commit-config.yaml
-  pyproject.toml
-  README.md
-  uv.lock
-  notebooks/
-  src/
-  tests/
-  data/
-  docs/
+.
+├── .container/            Containerfile (dev/test/prod) + compose.yaml
+├── .devcontainer/         VS Code dev container (Podman)
+├── .github/workflows/     ci.yml runs `mise run ci`
+├── .vscode/settings.json  per-repo interpreter pin + format on save
+├── .containerignore  .env.example  .gitignore  .pre-commit-config.yaml
+├── .mise.toml             Python 3.14 pin, env, tasks
+├── pyproject.toml  uv.lock  README.md
+├── src/labs/
+│   └── helpers.py         tested helpers notebooks import
+├── notebooks/             exploration only
+├── data/                  local data (git-ignored)
+├── docs/
+└── tests/
 ```
 
----
+## Environment files and secrets
 
-## JupyterLab Workflow (Day-to-day)
+- `.env.example` is committed and lists variable **names** only.
+- Copy it to `.env.dev`, `.env.test` or `.env.prod` and fill values locally. All `.env*` files except the example are git-ignored.
+- `APP_ENV` picks the file at startup; real environment variables always win over file values.
+- Production values belong in the platform's secret store (or `podman secret`), not in files.
 
-### Start JupyterLab using the uv environment
-From repo root:
+## Containers (Podman)
+
+One multi-stage `.container/Containerfile` with three targets:
+
+| Target | Use |
+|---|---|
+| `dev` | Tooling included; your source is bind-mounted over `/app` |
+| `test` | Copies `tests/` and runs them: the build fails if tests fail |
+| `prod` | Runtime only, non-root |
+
 ```bash
-uv run jupyter lab --no-browser
+podman build -f .container/Containerfile --target test .
+podman build -f .container/Containerfile --target prod -t jupyter-ai-labs:0.1.0 .
+mise run scan
+podman compose -f .container/compose.yaml up      # JupyterLab on 127.0.0.1:8888; keep token auth on
 ```
 
-If inside Docker/remote:
+Secrets go in at run time, never into the image:
 ```bash
-uv run jupyter lab --ip=0.0.0.0 --port 8888 --no-browser
+printf '%s' "$SOME_API_KEY" | podman secret create some_api_key -
+podman run --secret some_api_key,type=env,target=SOME_API_KEY ...
 ```
 
-### In JupyterLab
-- Select kernel: **Python (my-jupyter-ai-project)**
-- Keep reusable logic in `src/` (notebooks call into modules)
-- Keep notebooks lean; avoid committing huge outputs unless necessary
+The virtual environment inside images lives at `/opt/venv` (`UV_PROJECT_ENVIRONMENT`), so a mounted source folder never hides or clashes with it. Rootless notes: use host ports of 1024 or higher; add `:Z` to bind mounts on SELinux hosts.
 
----
+## What changed in this alignment (and why)
 
-## Continuous Delivery (Hybrid)
-
-Use repo-root execution as your standard.
-
-### Start of day / after pull
-```bash
-cd /workspaces/my-repo
-uv sync --dev #--extra jupyter
-```
-
-### Inner loop (engineering gates)
-```bash
-uv run ruff check .
-uv run pytest -q
-```
-
-### Commit/push
-```bash
-git add -A
-git commit -m "..."
-git push
-```
-
-### CI enforcement (same checks, deterministic)
-```bash
-uv sync --dev --extra jupyter
-uv run pre-commit run --all-files
-uv run pytest
-```
-
----
-
-## Optional: Professional notebook hygiene in Git
-Recommended if notebooks are committed:
-- Strip notebook outputs before commit (reduces noisy diffs)
-- Enforce consistent formatting and basic checks via pre-commit
-
-If you want, add `nbstripout` (or similar) into `.pre-commit-config.yaml`.
+| Before | Problem | Now |
+|---|---|---|
+| `.gitignore` covered `.env` only | `.env.dev`, `.env.test`, `.env.prod` could be committed | `.env.*` ignored, `.env.example` committed |
+| Dev tools in `[project.optional-dependencies].dev` | `uv sync --dev` did not install them | `[dependency-groups]`: plain `uv sync` installs `dev` |
+| Python 3.14 (mise), 3.12 (Docker), 3.11 (ruff, mypy, requires-python) | Passing locally, failing in the container, or the reverse | 3.14 everywhere |
+| Entry point and mypy targeted a missing `ai_agent` package | Broken CLI and type check | Real package name everywhere |
+| `pip-audit \|\| true` | Security task could never fail | Fails on findings; CI-ready |
+| Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` (dev/test/prod) + `compose.yaml` |
+| Duplicate `.mise.toml` / `.mise-python.toml` | Two sources of truth | `.mise.toml` only (Node and Java variants kept for polyglot repos) |
+| No tests, CI, `.env.example`, `.containerignore` | Gates promised but not wired | All present and passing |
