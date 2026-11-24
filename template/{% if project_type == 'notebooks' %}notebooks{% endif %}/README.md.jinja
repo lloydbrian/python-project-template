@@ -1,0 +1,8 @@
+# notebooks/
+
+Exploration lives here; reusable logic lives in `src/{{ package_name }}/` and is tested in `tests/`.
+
+- Start with `mise run lab` (or `podman compose -f .container/compose.yaml up`) and pick the **{{ kernel_display_name }}** kernel (`mise run kernel` registers it).
+- Import project code with `from {{ package_name }} import ...`; enable `%load_ext autoreload` and `%autoreload 2` so edits in `src/` apply without restarting the kernel.
+- Before sharing: *Kernel > Restart Kernel and Run All Cells*. Hidden state from out-of-order cells is the most common notebook bug.
+- Outputs are stripped on commit by the nbstripout hook, so data samples, tokens or personal data in cell output never reach git.

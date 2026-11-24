@@ -1,0 +1,170 @@
+# copier.yml — the single source of truth for every project generated from this template.
+#
+# Questions (asked once, saved to .copier-answers.yml in the generated repo and reused by
+# `copier update`) come first. Computed values (`when: false`) come last: they are never asked,
+# never saved, and are re-evaluated on every `copier update`, which is how pin bumps reach
+# existing projects. See docs/adr/0004-copier-single-source-template.md.
+
+_min_copier_version: "9.4"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+_message_after_copy: |
+
+  Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}).
+
+  Next steps (details in README.md):
+    1. cd {{ _copier_conf.dst_path }}
+    2. git init && git add -A && git commit -m "chore: scaffold from python-project-template {{ template_ref }}"
+    3. mise trust && mise install && mise run bootstrap
+    4. cp .env.example .env.dev      # fill values locally; never commit
+    5. mise run ci
+
+_message_after_update: |
+
+  Updated to python-project-template {{ template_ref }}.
+  Review the diff and any *.rej files, then run: mise run bootstrap && mise run ci
+
+# ---------------------------------------------------------------------------
+# Questions
+# ---------------------------------------------------------------------------
+project_type:
+  type: str
+  help: What are you building?
+  choices:
+    Service (FastAPI API shipped as a container image): service
+    Library (importable package with a CLI, no server): library
+    Notebooks (JupyterLab exploration backed by tested helpers): notebooks
+  default: service
+
+project_name:
+  type: str
+  help: Human-readable project name (e.g. "Ticket Triage")
+  validator: "{% if not project_name.strip() %}A project name is required{% endif %}"
+
+project_slug:
+  type: str
+  help: Repository and distribution name (lowercase letters, digits, hyphens)
+  default: "{{ project_name.strip() | lower | replace(' ', '-') | replace('_', '-') }}"
+  validator: >-
+    {% if not project_slug or project_slug[0] not in 'abcdefghijklmnopqrstuvwxyz'
+    or (project_slug | list | reject('in', 'abcdefghijklmnopqrstuvwxyz0123456789-') | list) %}Use lowercase
+    letters, digits and hyphens, starting with a letter{% endif %}
+
+package_name:
+  type: str
+  help: Python import package name
+  default: "{{ project_slug | replace('-', '_') }}"
+  validator: >-
+    {% if not package_name or package_name[0] not in 'abcdefghijklmnopqrstuvwxyz'
+    or (package_name | list | reject('in', 'abcdefghijklmnopqrstuvwxyz0123456789_') | list) %}Use lowercase
+    letters, digits and underscores, starting with a letter{% endif %}
+
+description:
+  type: str
+  help: One-line description
+  default: "{{ project_name }}"
+
+author_name:
+  type: str
+  help: Author or owning team
+  default: Lloyd D.
+
+python_version:
+  type: str
+  help: Python version (one answer drives mise, requires-python, the base image and ruff/mypy targets)
+  choices:
+    - "3.14"
+    - "3.13"
+  default: "3.14"
+
+github_owner:
+  type: str
+  help: GitHub owner of this template (used to call the shared CI workflow)
+  default: lloydbrian
+
+coverage_threshold:
+  type: int
+  help: Minimum test coverage percentage
+  default: 80
+  validator: "{% if coverage_threshold < 0 or coverage_threshold > 100 %}Use a value from 0 to 100{% endif %}"
+
+license:
+  type: str
+  help: License
+  choices:
+    - Proprietary
+    - MIT
+    - Apache-2.0
+  default: Proprietary
+
+http_port:
+  type: int
+  help: "HTTP port the service listens on (1024 or higher: rootless Podman cannot bind lower ports)"
+  default: 8000
+  when: "{{ project_type == 'service' }}"
+  validator: "{% if http_port < 1024 or http_port > 65535 %}Use a port from 1024 to 65535{% endif %}"
+
+include_container:
+  type: bool
+  help: Include a Podman container setup (Containerfile, compose, image scanning)?
+  default: false
+  when: "{{ project_type == 'library' }}"
+
+include_devcontainer:
+  type: bool
+  help: Include a VS Code dev container (runs on Podman)?
+  default: true
+  when: "{{ project_type != 'library' or include_container }}"
+
+kernel_display_name:
+  type: str
+  help: Jupyter kernel display name
+  default: "Python ({{ project_slug }})"
+  when: "{{ project_type == 'notebooks' }}"
+
+# ---------------------------------------------------------------------------
+# Computed values: never asked, never saved, re-evaluated on every update.
+# Release checklist: bump template_ref; run `mise run pin-images` to refresh digests.
+# ---------------------------------------------------------------------------
+template_ref:
+  type: str
+  default: v2.0.0
+  when: false
+
+has_container:
+  type: bool
+  default: "{{ project_type in ['service', 'notebooks'] or (project_type == 'library' and include_container) }}"
+  when: false
+
+has_devcontainer:
+  type: bool
+  default: "{{ has_container and include_devcontainer }}"
+  when: false
+
+uv_version:
+  type: str
+  default: 0.13.9
+  when: false
+
+trivy_version:
+  type: str
+  default: 0.76.2
+  when: false
+
+mise_version:
+  type: str
+  default: 2026.11.13
+  when: false
+
+# Base image digests (multi-arch index digests). Refreshed by `mise run pin-images`.
+# "sha256:PENDING" renders the tag without a digest; the release workflow refuses to ship it.
+python_digest:
+  type: str
+  default: "{{ {'3.14': 'sha256:PENDING', '3.13': 'sha256:PENDING'}[python_version] }}"
+  when: false
+
+uv_image_digest:
+  type: str
+  default: sha256:PENDING
+  when: false

@@ -1,0 +1,49 @@
+"""Command-line entry point: `uv run {{ project_slug }} --help`."""
+
+from __future__ import annotations
+
+from importlib.metadata import version as pkg_version
+
+import typer
+
+app = typer.Typer(help="{{ project_name }} tools", no_args_is_help=True)
+
+
+@app.command()
+def version() -> None:
+    """Print the installed package version."""
+    typer.echo(pkg_version("{{ project_slug }}"))
+{%- if project_type == "service" %}
+
+
+@app.command()
+def config() -> None:
+    """Validate settings and print them (fails fast on invalid configuration)."""
+    from {{ package_name }}.config import get_settings
+
+    typer.echo(get_settings().model_dump_json(indent=2))
+
+
+@app.command()
+def serve(host: str = "127.0.0.1", port: int | None = None, reload: bool = False) -> None:
+    """Run the API locally with uvicorn."""
+    import uvicorn
+
+    from {{ package_name }}.config import get_settings
+
+    uvicorn.run(
+        "{{ package_name }}.main:app",
+        host=host,
+        port=port or get_settings().http_port,
+        reload=reload,
+    )
+{%- else %}
+
+
+@app.command()
+def slugify(text: str) -> None:
+    """Example command backed by the library API; replace with real ones."""
+    from {{ package_name }}.core import slugify as _slugify
+
+    typer.echo(_slugify(text))
+{%- endif %}

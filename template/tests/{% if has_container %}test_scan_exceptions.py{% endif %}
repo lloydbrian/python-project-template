@@ -1,0 +1,28 @@
+import importlib.util
+from datetime import date
+from pathlib import Path
+
+_spec = importlib.util.spec_from_file_location(
+    "check_scan_exceptions", Path(__file__).parents[1] / "tools" / "check_scan_exceptions.py"
+)
+assert _spec and _spec.loader
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+
+def test_valid_entry_passes(tmp_path: Path) -> None:
+    f = tmp_path / ".trivyignore"
+    f.write_text("CVE-2026-1  # reason: not reachable; owner: lbd; expires: 2099-01-01\n")
+    assert _mod.check(f, today=date(2026, 1, 1)) == []
+
+
+def test_expired_entry_fails(tmp_path: Path) -> None:
+    f = tmp_path / ".trivyignore"
+    f.write_text("CVE-2026-1  # reason: not reachable; owner: lbd; expires: 2025-01-01\n")
+    assert "expired" in _mod.check(f, today=date(2026, 1, 1))[0]
+
+
+def test_undocumented_entry_fails(tmp_path: Path) -> None:
+    f = tmp_path / ".trivyignore"
+    f.write_text("CVE-2026-1\n")
+    assert "needs" in _mod.check(f)[0]

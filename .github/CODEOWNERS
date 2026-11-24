@@ -1,0 +1,5 @@
+# Changes to the template, its CI and its release path need the owner's review.
+*                @lloydbrian
+/.github/        @lloydbrian
+/copier.yml      @lloydbrian
+/template/       @lloydbrian

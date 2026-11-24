@@ -1,0 +1,16 @@
+# CI for this repo is the shared, versioned workflow from python-project-template.
+# Pipeline changes ship as template releases and arrive here through `copier update`.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    uses: {{ github_owner }}/python-project-template/.github/workflows/python-ci.yml@{{ template_ref }}
+    with:
+      image: {{ 'true' if has_container else 'false' }}
+      smoke: {{ 'true' if project_type == 'service' else 'false' }}
+      mise-version: "{{ mise_version }}"

@@ -1,0 +1,8 @@
+# Lint settings for the maintainer scripts in scripts/ (template/ is checked after rendering).
+target-version = "py314"
+line-length = 120
+extend-exclude = ["template", ".render"]
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "S", "RUF"]
+ignore = ["S602", "S603", "S607", "S311"]   # maintainer scripts shell out by design; random is not crypto here

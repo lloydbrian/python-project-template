@@ -1,0 +1,15 @@
+# Delivery-loop contract for python-project-template (see CONTRIBUTING.md).
+gate: "mise run template-ci"
+fast_gate: "mise run render-test -- service"
+browser_test: none
+mutation: "mise run negative-controls"
+smoke: "REQUIRE_CONTAINER=1 mise run render-test -- service"
+deploy_beta:
+  - "git tag vX.Y.Z-rc.N && git push origin vX.Y.Z-rc.N"   # release.yml creates a pre-release
+deploy_prod:
+  - "git tag vX.Y.Z && git push origin vX.Y.Z"
+build_stamp_check: "gh release view vX.Y.Z --json tagName,isPrerelease && grep -n 'default: vX.Y.Z' copier.yml"
+handoff_docs: [CHANGELOG.md, docs/adr/, docs/SESSION-HANDOFF.md]
+prompting_scripts:
+  - script: scripts/pin_images.sh
+    non_interactive: "never prompts; dry run by default, --write applies"

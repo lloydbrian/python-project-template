@@ -1,0 +1,48 @@
+# .container/compose.yaml — run with Podman:  podman compose -f .container/compose.yaml up --build
+{%- if project_type == "service" %}
+# Runs the hardened production image locally, the way it runs in production:
+# read-only root filesystem, all Linux capabilities dropped, no privilege escalation.
+# For the edit-reload loop use `mise run serve` (host) or the dev container instead.
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .container/Containerfile
+      target: prod
+    image: {{ project_slug }}:dev
+    ports: ["127.0.0.1:{{ http_port }}:{{ http_port }}"]   # bound to your machine only
+    env_file:                         # local values only; never commit this file
+      - path: ../.env.dev
+        required: false               # compose still starts before you create it
+    environment:
+      APP_ENV: dev
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    healthcheck:                      # the image has no curl: probe with Python
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:{{ http_port }}/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+{%- else %}
+# JupyterLab in a container, using the dev stage so edits in src/ are importable immediately.
+# Open the tokenized URL printed in the logs; keep token authentication on.
+services:
+  lab:
+    build:
+      context: ..
+      dockerfile: .container/Containerfile
+      target: dev
+    image: {{ project_slug }}:lab-dev
+    command: jupyter lab --ip 0.0.0.0 --port 8888 --no-browser
+    working_dir: /app
+    ports: ["127.0.0.1:8888:8888"]    # bound to your machine only
+    volumes: ["..:/app:Z"]            # :Z relabels for SELinux hosts; harmless elsewhere
+    env_file:
+      - path: ../.env.dev
+        required: false
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+{%- endif %}
