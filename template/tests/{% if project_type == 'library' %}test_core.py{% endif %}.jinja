@@ -1,0 +1,11 @@
+import pytest
+
+from {{ package_name }}.core import slugify
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("Hello,  World!", "hello-world"), ("  spaced  ", "spaced"), ("", ""), ("A_b-C", "a-b-c")],
+)
+def test_slugify(raw: str, expected: str) -> None:
+    assert slugify(raw) == expected

@@ -1,0 +1,229 @@
+"""Retrieval helpers: a small document store, PDF text extraction and text chunking.
+
+Why a wrapper: the rest of the code depends on `DocumentStore.add()` and `.search()`, not on
+{% if ai_kind == "lancedb" %}LanceDB{% else %}ChromaDB{% endif %}'s own API, so changing the vector store (for example ChromaDB -> LanceDB to move to
+Python 3.15) touches this one file.
+
+{%- if ai_kind == "lancedb" %}
+Embeddings run locally with model2vec's potion-retrieval-32M: static embeddings, so no PyTorch and
+very fast on CPU, at somewhat lower retrieval quality than transformer models. English-focused.
+The model is downloaded once at a pinned revision and cached; container images bake it in.
+{%- else %}
+Embeddings run locally with Chroma's built-in all-MiniLM-L6-v2 (ONNX): 384 dimensions,
+English-focused, and input longer than 256 tokens is cut off. The model (about 80 MB) is
+downloaded on first use and cached; container images bake it in.
+{%- endif %}
+Split long documents with `chunk_text()` before adding them: smaller chunks retrieve better.
+"""
+
+from __future__ import annotations
+
+{% if project_type != "service" -%}
+import os
+{% endif -%}
+from collections.abc import Sequence
+from dataclasses import dataclass
+{%- if ai_kind == 'lancedb' %}
+from functools import lru_cache
+{%- endif %}
+from pathlib import Path
+from typing import Any{% if ai_kind == 'lancedb' %}, cast{% endif %}
+from uuid import uuid4
+
+{%- if ai_kind == "lancedb" %}
+
+import lancedb
+from huggingface_hub import snapshot_download
+from lancedb.embeddings import EmbeddingFunction, TextEmbeddingFunction, register
+from lancedb.pydantic import LanceModel, Vector
+from model2vec import StaticModel
+{%- else %}
+
+import chromadb
+from chromadb.api.types import Documents, EmbeddingFunction
+from chromadb.config import Settings
+{%- endif %}
+
+{% if ai_kind == "lancedb" -%}
+DEFAULT_MODEL = "minishlab/potion-retrieval-32M"  # MIT licence, tuned for retrieval
+# Pinned commit: the build downloads exactly this model, never whatever `main` has become.
+MODEL_REVISION = "6fc8051fab2a1e0ee76689cf08c853792ac285e7"
+{%- else -%}
+DEFAULT_MODEL = "all-MiniLM-L6-v2"  # Chroma's built-in embedder (SHA-256 checked by Chroma)
+{%- endif %}
+
+
+def default_store_path() -> str:
+    """VECTOR_STORE_PATH{% if project_type == "service" %} (service settings){% endif %}, else data/vectors (git-ignored)."""
+{%- if project_type == "service" %}
+    from {{ package_name }}.config import get_settings
+
+    return get_settings().vector_store_path
+{%- else %}
+    return os.environ.get("VECTOR_STORE_PATH", "data/vectors")
+{%- endif %}
+
+
+@dataclass(frozen=True)
+class Hit:
+    """One search result. `distance`: lower means closer to the query."""
+
+    id: str
+    text: str
+    distance: float
+
+
+{%- if ai_kind == "lancedb" %}
+
+
+# LanceDB's embedding helpers (register, create, SourceField, VectorField) are untyped, hence
+# the targeted `type: ignore[no-untyped-call]` comments below; everything else is type-checked.
+
+
+@lru_cache(maxsize=4)
+def _load_model(name: str, revision: str) -> StaticModel:  # pragma: no cover - downloads
+    """Download (once, then from cache) the model files at `revision` and load them."""
+    return StaticModel.from_pretrained(snapshot_download(name, revision=revision))
+
+
+@register("model2vec")  # type: ignore[no-untyped-call]
+class Model2VecEmbeddings(TextEmbeddingFunction):
+    """LanceDB embedding function for model2vec static models (registered as "model2vec").
+
+    The registry name and fields are saved in each table's schema, so a store reopens with the
+    same model and revision it was created with.
+    """
+
+    name: str = DEFAULT_MODEL
+    revision: str = MODEL_REVISION
+
+    def ndims(self) -> int:
+        return int(self._model().dim)
+
+    def generate_embeddings(self, texts: Sequence[str]) -> list[list[float]]:  # type: ignore[override]
+        return cast(list[list[float]], self._model().encode(list(texts)).tolist())
+
+    def _model(self) -> StaticModel:
+        return _load_model(self.name, self.revision)
+
+
+def default_embedder() -> EmbeddingFunction:
+    """potion-retrieval-32M through model2vec, at the pinned revision.
+
+    LanceDB requires `.create()`: it records the function's settings in the table schema.
+    """
+    return cast(EmbeddingFunction, Model2VecEmbeddings.create())  # type: ignore[no-untyped-call]
+
+
+class DocumentStore:
+    """Embedded LanceDB table (files under `path`, default VECTOR_STORE_PATH; no server)."""
+
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        table: str = "documents",
+        embedder: EmbeddingFunction | None = None,
+    ) -> None:
+        emb = embedder or default_embedder()
+
+        class Document(LanceModel):  # schema: LanceDB fills `vector` from `text` automatically
+            id: str
+            text: str = emb.SourceField()  # type: ignore[no-untyped-call]
+            vector: Vector(emb.ndims()) = emb.VectorField()  # type: ignore[valid-type,no-untyped-call]
+
+        db = lancedb.connect(str(path or default_store_path()))
+        self._table = db.create_table(table, schema=Document, exist_ok=True)
+
+    def add(self, texts: Sequence[str], ids: Sequence[str] | None = None) -> list[str]:
+        """Store texts (embedded on write); returns their ids."""
+        keys = list(ids) if ids is not None else [uuid4().hex for _ in texts]
+        self._table.add([{"id": k, "text": t} for k, t in zip(keys, texts, strict=True)])
+        return keys
+
+    def search(self, query: str, k: int = 5) -> list[Hit]:
+        """The k stored texts closest to `query`."""
+        rows: list[dict[str, Any]] = self._table.search(query).limit(k).to_list()
+        return [Hit(id=r["id"], text=r["text"], distance=float(r["_distance"])) for r in rows]
+
+    def count(self) -> int:
+        return int(self._table.count_rows())
+
+
+def warm_up() -> None:  # pragma: no cover - downloads the model; run by the image build
+    """Download and load the embedding model once (used when building the container image)."""
+    _load_model(DEFAULT_MODEL, MODEL_REVISION).encode(["warm-up"])
+{%- else %}
+
+
+class DocumentStore:
+    """Embedded ChromaDB collection (files under `path`, no server).
+
+    Only the embedded `PersistentClient` is used. Do not run ChromaDB as a server, and only open
+    vector stores this project created: a store's saved collection settings name the embedding
+    function that loads it, which is how the advisories excepted in `.pip-audit-ignore` inject code.
+    """
+
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        collection: str = "documents",
+        embedder: EmbeddingFunction[Documents] | None = None,
+    ) -> None:
+        client = chromadb.PersistentClient(
+            path=str(path or default_store_path()),
+            settings=Settings(anonymized_telemetry=False),  # no usage data leaves this machine
+        )
+        # No embedder given: Chroma's built-in all-MiniLM-L6-v2 (ONNX, CPU) is used.
+        kwargs: dict[str, Any] = {} if embedder is None else {"embedding_function": embedder}
+        self._collection = client.get_or_create_collection(collection, **kwargs)
+
+    def add(self, texts: Sequence[str], ids: Sequence[str] | None = None) -> list[str]:
+        """Store texts (embedded on write); returns their ids."""
+        keys = list(ids) if ids is not None else [uuid4().hex for _ in texts]
+        if len(keys) != len(texts):
+            raise ValueError("ids and texts must have the same length")
+        self._collection.add(ids=keys, documents=list(texts))
+        return keys
+
+    def search(self, query: str, k: int = 5) -> list[Hit]:
+        """The k stored texts closest to `query`."""
+        result = self._collection.query(query_texts=[query], n_results=k)
+        ids = result["ids"][0]
+        documents = (result["documents"] or [[]])[0]
+        distances = (result["distances"] or [[]])[0]
+        return [
+            Hit(id=i, text=d or "", distance=float(s))
+            for i, d, s in zip(ids, documents, distances, strict=True)
+        ]
+
+    def count(self) -> int:
+        return int(self._collection.count())
+
+
+def warm_up() -> None:  # pragma: no cover - downloads the model; run by the image build
+    """Download and load Chroma's built-in embedding model once (used by the image build)."""
+    from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+
+    DefaultEmbeddingFunction()(["warm-up"])
+{%- endif %}
+
+
+def chunk_text(text: str, max_words: int = 180, overlap: int = 30) -> list[str]:
+    """Split text into overlapping word windows that stay under the model's 256-token limit."""
+    if max_words <= overlap or overlap < 0:
+        raise ValueError("need max_words > overlap >= 0")
+    words = text.split()
+    if not words:
+        return []  # e.g. a scanned PDF with no text layer: nothing to embed
+    step = max_words - overlap
+    return [
+        " ".join(words[i : i + max_words]) for i in range(0, max(len(words) - overlap, 1), step)
+    ]
+
+
+def pdf_text(path: str | Path) -> str:
+    """Text of every page of a PDF (pdfplumber keeps reading order and handles tables well)."""
+    import pdfplumber
+
+    with pdfplumber.open(str(path)) as pdf:
+        return "\n\n".join(page.extract_text() or "" for page in pdf.pages)

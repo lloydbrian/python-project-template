@@ -1,0 +1,65 @@
+"""Web search through Tavily, for retrieval-augmented answers that need current information.
+
+The API key comes from `TAVILY_API_KEY`: a real environment variable (for example a `podman secret`)
+wins, otherwise {% if project_type == "service" %}the service settings read it from `.env.<APP_ENV>`{% else %}it is read from `.env.<APP_ENV>` (default `.env.dev`){% endif %}.
+It is never logged, and it is never part of a URL.
+"""
+
+from __future__ import annotations
+
+{% if project_type != "service" -%}
+import os
+{% endif -%}
+from dataclasses import dataclass
+
+{% if project_type != "service" -%}
+from dotenv import dotenv_values
+{% endif -%}
+from tavily import TavilyClient
+{%- if project_type == "service" %}
+
+from {{ package_name }}.config import get_settings
+{%- endif %}
+
+
+@dataclass(frozen=True)
+class WebResult:
+    title: str
+    url: str
+    content: str
+    score: float
+
+
+class MissingApiKeyError(RuntimeError):
+    """Raised when no Tavily API key is configured."""
+
+
+def configured_api_key() -> str | None:
+    """TAVILY_API_KEY from the environment or the local .env file (never printed)."""
+{%- if project_type == "service" %}
+    secret = get_settings().tavily_api_key
+    return secret.get_secret_value() if secret else None
+{%- else %}
+    if key := os.environ.get("TAVILY_API_KEY"):
+        return key
+    return dotenv_values(f".env.{os.environ.get('APP_ENV', 'dev')}").get("TAVILY_API_KEY") or None
+{%- endif %}
+
+
+def search_web(query: str, max_results: int = 5, api_key: str | None = None) -> list[WebResult]:
+    """Top web results for `query`. Pass `api_key`, or configure TAVILY_API_KEY."""
+    key = api_key or configured_api_key()
+    if not key:
+        raise MissingApiKeyError(
+            "Set TAVILY_API_KEY (in .env.dev, or as a podman secret) to use web search"
+        )
+    response = TavilyClient(api_key=key).search(query=query, max_results=max_results)
+    return [
+        WebResult(
+            title=str(r.get("title", "")),
+            url=str(r.get("url", "")),
+            content=str(r.get("content", "")),
+            score=float(r.get("score", 0.0)),
+        )
+        for r in response.get("results", [])
+    ]

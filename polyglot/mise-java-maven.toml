@@ -1,0 +1,27 @@
+# polyglot/mise-java-maven.toml — Java + Maven baseline for non-Python repos.
+# Copy to your repo as .mise.toml. Same idea as the Python template: pinned tools, one `ci` task.
+[tools]
+java = "temurin-25"      # current LTS (Eclipse Temurin; next LTS is 29, due Sept 2027)
+maven = "3.9"            # latest stable line (3.9.16); Maven 4 is still a release candidate
+
+[env]
+MAVEN_OPTS = "-Dstyle.color=always"
+
+[tasks.bootstrap]
+description = "Verify the toolchain and warm the dependency cache"
+run = """
+java -version
+mvn -version
+mvn -q -DskipTests dependency:go-offline
+"""
+
+[tasks.format]
+description = "Format with Spotless (configure the plugin in pom.xml first; fails if not configured)"
+run = "mvn -q spotless:apply"
+
+[tasks.test]
+run = "mvn -q test"
+
+[tasks.ci]
+description = "CI gate: clean verify (compile, tests and any configured checks)"
+run = "mvn -q clean verify"

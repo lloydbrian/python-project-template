@@ -1,0 +1,26 @@
+from typer.testing import CliRunner
+
+from {{ package_name }}.cli import app
+
+runner = CliRunner()
+
+
+def test_version_prints_package_version() -> None:
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "0.1.0"
+{%- if project_type == "service" %}
+
+
+def test_config_prints_validated_settings() -> None:
+    result = runner.invoke(app, ["config"])
+    assert result.exit_code == 0
+    assert '"app_env"' in result.stdout
+{%- else %}
+
+
+def test_slugify_command() -> None:
+    result = runner.invoke(app, ["slugify", "Hello World"])
+    assert result.exit_code == 0
+    assert result.stdout.strip() == "hello-world"
+{%- endif %}

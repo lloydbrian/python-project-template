@@ -1,0 +1,82 @@
+# .container/Containerfile — one multi-stage file built with Podman: `podman build --target <stage>`.
+#
+#   python-base  patched OS, no pip, non-root user          (shared by every stage)
+#   build        uv installs the locked runtime deps + this package into /opt/venv (non-editable)
+#   dev          + dev tooling; your source is bind-mounted over /app (compose, dev container)
+#   test         + tests; the build fails if the tests fail
+{%- if project_type == "notebooks" %}
+#   lab          runtime venv only; JupyterLab as a non-root user
+{%- else %}
+#   prod         runtime venv only (no source tree, no uv, no pip), non-root
+{%- endif %}
+#
+# Image names are fully qualified because Podman does not guess registries for short names.
+# Digests are pinned by the template release (`mise run pin-images`); see ADR 0007.
+FROM docker.io/library/python:{{ python_version }}-slim{% if python_digest != 'sha256:PENDING' %}@{{ python_digest }}{% endif %} AS python-base
+# Patch OS packages at build time and remove pip: uv installs everything, and the base image's
+# pip bundles its own urllib3/msgpack/setuptools copies that scanners flag (ADR 0006).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/* \
+ && python -m pip uninstall -y pip \
+ && useradd --create-home --uid 10001 app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH="/opt/venv/bin:$PATH"
+
+FROM python-base AS build
+COPY --from=ghcr.io/astral-sh/uv:{{ uv_version }}{% if uv_image_digest != 'sha256:PENDING' %}@{{ uv_image_digest }}{% endif %} /uv /usr/local/bin/uv
+# venv outside /app so a bind-mounted source folder never hides it; no uv cache in layers
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_COMPILE_BYTECODE=1 UV_NO_CACHE=1 UV_PYTHON_DOWNLOADS=never
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md{% if license != 'Proprietary' %} LICENSE{% endif %} ./
+# --no-default-groups: runtime dependencies only (no dev, security{% if project_type == 'notebooks' %} or notebooks{% endif %} tooling)
+RUN uv sync --locked --no-default-groups --no-editable --no-install-project
+COPY src ./src
+RUN uv sync --locked --no-default-groups --no-editable
+
+FROM build AS dev
+# git: VS Code source control and pre-commit need it; the runtime stages do not get it
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/* \
+ && uv sync --locked \
+ && chown -R app:app /opt/venv
+USER app
+
+FROM build AS test
+COPY tools ./tools
+COPY tests ./tests
+RUN uv sync --locked && chown -R app:app /app /opt/venv
+USER app
+RUN pytest -m "not live"
+{%- if project_type == "notebooks" %}
+
+FROM python-base AS lab
+COPY --from=build /opt/venv /opt/venv
+USER app
+WORKDIR /home/app/work
+{%- if ai_kind != "none" %}
+# Bake the embedding model into the image as the runtime user, so containers never download it:
+# they start offline and work with a read-only root filesystem. Needs network at build time only.
+RUN python -c "from {{ package_name }}.rag import warm_up; warm_up()"
+ENV HF_HUB_OFFLINE=1{% if ai_kind == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
+{%- endif %}
+EXPOSE 8888
+CMD ["jupyter", "lab", "--ip", "0.0.0.0", "--port", "8888", "--no-browser"]
+{%- else %}
+
+FROM python-base AS prod
+COPY --from=build /opt/venv /opt/venv
+USER app
+WORKDIR /home/app
+{%- if ai_kind != "none" %}
+# Bake the embedding model into the image as the runtime user, so containers never download it:
+# they start offline and work with a read-only root filesystem. Needs network at build time only.
+RUN python -c "from {{ package_name }}.rag import warm_up; warm_up()"
+ENV HF_HUB_OFFLINE=1{% if ai_kind == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
+{%- endif %}
+{%- if project_type == "service" %}
+EXPOSE {{ http_port }}
+CMD ["uvicorn", "{{ package_name }}.main:app", "--host", "0.0.0.0", "--port", "{{ http_port }}", "--no-access-log"]
+{%- else %}
+ENTRYPOINT ["{{ project_slug }}"]
+CMD ["--help"]
+{%- endif %}
+{%- endif %}

@@ -1,0 +1,42 @@
+# Runs on every commit (installed by `mise run bootstrap`) and in CI (`mise run ci`).
+# Revisions are pinned by commit SHA (a tag can be moved; a SHA cannot), with the tag in the
+# `# frozen:` comment. The template refreshes them on each release (`copier update`).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files     # keeps data and model files out of git
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 00eaed0068329eb6ca6bcb8de7b46c372d8d1c19  # frozen: 0.13.9
+    hooks:
+      - id: uv-lock                     # fails if uv.lock is out of date with pyproject.toml
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 9026c9127e153371d7a78dfcb0c45ae2046a3d10  # frozen: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks                    # blocks commits containing secrets (staged changes);
+                                        # `mise run ci` also scans the full git history
+{%- if project_type == "notebooks" %}
+  - repo: https://github.com/kynan/nbstripout
+    rev: 512fa4ac6e4674f3a748e7dd5a546c037ec39edf  # frozen: 0.9.2
+    hooks:
+      - id: nbstripout                  # strips notebook outputs before commit
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 32aa5f28a7ce8a5b386159581d99798c6b87c5e3  # frozen: 1.10.0
+    hooks:
+      - id: nbqa-ruff
+        args: [--fix]
+      - id: nbqa-ruff-format
+{%- endif %}
