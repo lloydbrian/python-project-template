@@ -79,9 +79,10 @@ python_version:
   type: str
   help: Python version (one answer drives mise, requires-python, the base image and ruff/mypy targets)
   choices:
+    - "3.15"
     - "3.14"
     - "3.13"
-  default: "3.14"
+  default: "3.15"
 
 github_owner:
   type: str
@@ -165,14 +166,14 @@ gitleaks_version:
 
 mise_version:
   type: str
-  default: 2026.11.13
+  default: 2026.11.14
   when: false
 
 # Base image digests (multi-arch index digests). Refreshed by `mise run pin-images`.
 # "sha256:PENDING" renders the tag without a digest; the release workflow refuses to ship it.
 python_digest:
   type: str
-  default: "{{ {'3.14': 'sha256:PENDING', '3.13': 'sha256:PENDING'}[python_version] }}"
+  default: "{{ {'3.15': 'sha256:PENDING', '3.14': 'sha256:PENDING', '3.13': 'sha256:PENDING'}[python_version] }}"
   when: false
 
 uv_image_digest:

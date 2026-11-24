@@ -1,8 +1,8 @@
 # polyglot/mise-java-maven.toml — Java + Maven baseline for non-Python repos.
 # Copy to your repo as .mise.toml. Same idea as the Python template: pinned tools, one `ci` task.
 [tools]
-java = "temurin-25"      # current LTS (Eclipse Temurin)
-maven = "3.9"
+java = "temurin-25"      # current LTS (Eclipse Temurin; next LTS is 29, due Sept 2027)
+maven = "3.9"            # latest stable line (3.9.16); Maven 4 is still a release candidate
 
 [env]
 MAVEN_OPTS = "-Dstyle.color=always"

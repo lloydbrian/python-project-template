@@ -33,7 +33,7 @@ v2 removes those failure modes structurally. The README's "Why this template exi
   - `check_pins.py` policy;
   - time-boxed scan exceptions, at most 90 days, with no trivy config bypass.
 - **Template CI**:
-  - 5-variant render matrix, each running its own gates plus an image build-context simulation;
+  - 6-variant render matrix, each running its own gates plus an image build-context simulation;
   - 20 negative controls;
   - a `copier update` test.
 - **Docs**:
@@ -44,7 +44,7 @@ v2 removes those failure modes structurally. The README's "Why this template exi
 
 ### Verification
 - Gates in the build sandbox:
-  - 5/5 variants pass lint, format, mypy (strict), pytest with coverage, pip-audit, bandit, full-history gitleaks and image-stage simulation;
+  - 6/6 variants (Python 3.15 default, plus 3.14 and 3.13) pass lint, format, mypy (strict), pytest with coverage, pip-audit, bandit, full-history gitleaks and image-stage simulation;
   - 19/20 negative controls caught;
   - the update test passes;
   - actionlint, pre-commit and the pin policy are clean.

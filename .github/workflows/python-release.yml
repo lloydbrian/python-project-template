@@ -23,7 +23,7 @@ on:
         default: prod
       mise-version:
         type: string
-        default: "2026.11.13"
+        default: "2026.11.14"
       attest:
         description: >-
           Record build provenance on public repositories. Private repositories always skip it:
@@ -73,7 +73,7 @@ jobs:
         # does not match 0.2.0. Pre-release status comes from the same parse.
         run: |
           version="$(uv version --short)"
-          uv run --no-project --with 'packaging==25.0' python - "$GITHUB_REF_NAME" "$version" <<'PY'
+          uv run --no-project --with 'packaging==26.4' python - "$GITHUB_REF_NAME" "$version" <<'PY'
           import os, sys
           from packaging.version import Version
           tag, version = Version(sys.argv[1]), Version(sys.argv[2])

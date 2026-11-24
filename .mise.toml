@@ -3,7 +3,7 @@
 #   mise trust && mise install && mise tasks
 
 [tools]
-python = "3.14"
+python = "3.15"
 uv = "0.13.9"            # keep equal to copier.yml uv_version (check_pins enforces the hook rev)
 trivy = "0.76.2"
 gitleaks = "8.30.1"
@@ -34,7 +34,7 @@ run = "python3 scripts/render.py"
 [tasks.render-all]
 description = "Render and gate every variant (no container stages unless REQUIRE_CONTAINER=1)"
 run = """
-for v in service library library-container notebooks service-py313; do
+for v in service library library-container notebooks service-py314 service-py313; do
   python3 scripts/render.py "$v"
 done
 """

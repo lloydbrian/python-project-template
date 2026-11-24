@@ -104,7 +104,7 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | `package_name` | always | slug with `_`, e.g. `ticket_triage` | Python import package under `src/` |
 | `description` | always | the project name | `pyproject.toml` and README |
 | `author_name` | always | `Lloyd D.` | `pyproject.toml` authors |
-| `python_version` | always | `3.14` | One value for mise, `requires-python`, the base image, ruff `target-version` and mypy `python_version`. `3.13` is offered for dependencies not yet on 3.14 |
+| `python_version` | always | `3.15` | One value for mise, `requires-python`, the base image, ruff `target-version` and mypy `python_version`. Choices `3.15`, `3.14`, `3.13`: pick an older one only for a dependency that has no wheels for the newer version yet (for example onnxruntime, which has none for 3.15 as of November 2026) |
 | `github_owner` | always | `lloydbrian` | Where the project's CI finds the shared workflow |
 | `coverage_threshold` | always | `80` | `fail_under` for pytest-cov |
 | `license` | always | `Proprietary` | `Proprietary` writes no LICENSE file; `MIT` and `Apache-2.0` write the full text |
@@ -248,7 +248,7 @@ Every generated project ships with these gates, and every gate exits non-zero on
                                          .github/workflows/template-ci.yml   (this repo's own CI)
                                              lint (hooks, actionlint, pins, nothing ignored)
                                              render matrix: service, library, library-container,
-                                               notebooks, service-py313 (each runs its own gates,
+                                               notebooks, service-py314, service-py313 (each runs its own gates,
                                                the image-context simulation, and with
                                                REQUIRE_CONTAINER=1 image build, scan and smoke)
                                              negative controls · copier update test
@@ -328,6 +328,8 @@ REQUIRE_CONTAINER=1 mise run render-test -- service   # include image build, sca
 5. Update the reference app (`template-repo`) to the rc and check its CI and a test release. Then set `template_ref: v2.1.0`, merge, and tag `v2.1.0`.
 
 There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). Review tool, action and base-image versions monthly and after security advisories.
+
+**Dependency floors** in `template/pyproject.toml.jinja` are the latest releases at each template release, and never below a version with a published security fix. Refresh them every release: check PyPI for the latest versions, then prove the old floors' risk is gone with a `--resolution lowest-direct` resolve audited by pip-audit (a floor only matters when something resolves low, so audit the low end). Each Python choice must install from wheels on macOS arm64 and Linux amd64/arm64: `uv pip compile --only-binary :all: --python-version <ver> --python-platform <platform>`.
 
 ---
 
@@ -413,7 +415,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
 | Gates assumed to work | Nothing proved a gate could fail | 20 negative controls in template CI |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
-| `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 24 LTS, Java 25 LTS; no masked failures |
+| `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 26 LTS (no Corepack: Node 25+ dropped it), Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |
 
 The reference application [`template-repo`](https://github.com/lloydbrian/template-repo) is now *generated from* this template, not maintained separately.

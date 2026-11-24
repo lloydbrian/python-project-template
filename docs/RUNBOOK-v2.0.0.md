@@ -78,13 +78,14 @@ PY
 
 ```bash
 mise trust && mise install
-mise run template-ci                                   # lint, 5 variants, 20 negative controls, update test
+mise run template-ci                                   # lint, 6 variants, 20 negative controls, update test
 REQUIRE_CONTAINER=1 mise run render-test -- service    # image test stage, build, scan, SBOM, smoke
 REQUIRE_CONTAINER=1 mise run render-test -- notebooks
+REQUIRE_CONTAINER=1 mise run render-test -- service-py313   # oldest supported Python
 ```
 
 **Expect:**
-- `render-test <variant>: PASS` for all five variants;
+- `render-test <variant>: PASS` for all six variants;
 - every container variant prints `image_sim: target test: PASS`;
 - `negative controls: 20/20 caught`;
 - `update-test: ... PASS`;
@@ -109,8 +110,8 @@ git add copier.yml && git commit -m "chore: pin base images by multi-arch digest
 ```
 
 **Expect:**
-- the dry run shows `python:3.14-slim`, `python:3.13-slim` and `uv:0.13.9` with `sha256:` digests;
-- the diff touches only the `python_digest` and `uv_image_digest` lines;
+- the dry run shows `python:3.13-slim`, `python:3.14-slim`, `python:3.15-slim` and `uv:0.13.9` with `sha256:` digests;
+- the diff touches only the `python_digest` and `uv_image_digest` lines (three Python digests and one uv digest);
 - the re-render's `FROM` line now ends `@sha256:...`;
 - the service render still passes.
 
@@ -301,5 +302,5 @@ cd "$REF" && git switch -c chore/template-v2.0.0 && copier update --vcs-ref v2.0
 After step 10, append to `docs/RELEASES.md`:
 
 ```text
-2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 5/5 variants, 20/20 controls, update PASS
+2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 6/6 variants, 20/20 controls, update PASS
 ```

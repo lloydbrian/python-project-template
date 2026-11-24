@@ -1,7 +1,11 @@
 # polyglot/mise-node.toml — Node.js baseline for non-Python repos (or a Node part of a polyglot repo).
 # Copy to your repo as .mise.toml. Same idea as the Python template: pinned tools, one `ci` task.
 [tools]
-node = "24"              # current LTS line; pin a full version (e.g. "24.11.1") for strict reproducibility
+node = "26"              # Active LTS since 2026-10-28 (supported to April 2029); the line pin picks up
+                         # security patches. Pin a full version (e.g. "26.13.1") for strict reproducibility.
+# Node 25+ no longer ships Corepack, so pin pnpm or yarn here instead if you use one:
+# pnpm = "10"
+# yarn = "4"
 
 [env]
 NODE_ENV = "development"
@@ -9,10 +13,9 @@ NODE_ENV = "development"
 [tasks.bootstrap]
 description = "Install dependencies exactly as locked (choose ONE package manager)"
 run = """
-corepack enable
-# pnpm:  corepack prepare pnpm@latest-10 --activate && pnpm install --frozen-lockfile
-# yarn:  corepack prepare yarn@stable --activate && yarn install --immutable
 npm ci
+# pnpm (pinned in [tools]):  pnpm install --frozen-lockfile
+# yarn (pinned in [tools]):  yarn install --immutable
 """
 
 [tasks.lint]

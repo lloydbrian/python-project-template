@@ -115,7 +115,9 @@ The reasoning behind each decision is recorded as ADRs in the template repo (`do
 | **JupyterLab** + **ipykernel** | Notebook exploration on this repo's environment | The kernel is this repo's `.venv`, so notebooks and tests import the same code | Global Jupyter install (environment drift) |
 | **nbstripout** + **nbQA** | Strip outputs on commit; lint notebook code with ruff | Keeps diffs reviewable and keeps data and secrets in outputs out of git | Manual "clear outputs" |
 {%- endif %}
-| **httpx** + **tenacity** | HTTP client with retries | Sync and async clients with timeouts; explicit, testable retry policies for flaky upstreams such as model APIs | requests (sync only) |
+| **httpx** + **tenacity** | HTTP client with retries | Sync and async clients with timeouts; explicit, testable retry policies for flaky upstreams such as model APIs. httpx is still what most AI SDKs use, but it has had no release since December 2024; its successor, httpx2, is maintained under the pydantic organisation. Watch it for a future template release | requests (sync only) |{%- if svc %}
+| **httpx2** (dev only) | Backend for FastAPI's `TestClient` | Starlette 1.10+ deprecates `httpx` as the TestClient backend in favour of httpx2, from the same author | — |
+{%- endif %}
 
 ---
 
@@ -457,6 +459,7 @@ Branch protection should require the check named **`check / check`**.
 {%- endif %}
 
 - **Dependency groups, not extras, for tooling** (PEP 735): plain `uv sync` installs the `dev` group, and nothing in a group can leak into a published package.
+- **Version floors** (`>=`) are the latest releases when this template was released, and never below a version with a published security fix, so nothing can resolve to a known-vulnerable version. `uv.lock` holds the exact versions; `copier update` raises the floors with each template release.
 {%- if svc %}
 - A service keeps its web framework in `dependencies`, because images install no extras. The `ai` extra holds the data stack (numpy, pandas) for local analysis; anything the running service needs belongs in `dependencies`.
 {%- endif %}

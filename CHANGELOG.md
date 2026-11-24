@@ -14,7 +14,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Shared workflows `python-ci.yml` and `python-release.yml` called by generated projects at a pinned release (ADR 0009).
 - Releases without a registry: multi-arch OCI archives, CycloneDX SBOMs, build provenance, `SHA256SUMS` (ADR 0011).
 - Time-boxed `.trivyignore` exceptions validated by `tools/check_scan_exceptions.py` (ADR 0006).
-- Template CI: render matrix (5 variants) with an image build-context simulation (`scripts/image_sim.py`), 20 negative controls, `copier update` test, pin policy, actionlint.
+- Template CI: render matrix (6 variants: service, library, library-container, notebooks, and the service on 3.14 and 3.13) with an image build-context simulation (`scripts/image_sim.py`), 20 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
 - ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
@@ -23,12 +23,16 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 
 ### Changed
 - Workstation set-up consolidated into `workstation/README.md`; terminal config moved to `workstation/terminal/`. Dropped the `openssl readline zlib sqlite` build dependencies (mise installs prebuilt Python).
-- Node.js and Java/Maven mise baselines moved to `polyglot/`, updated to Node 24 LTS and Java 25 LTS, and the masked `|| true` removed from the Maven format task.
+- Node.js and Java/Maven mise baselines moved to `polyglot/`, updated to Node 26 LTS and Java 25 LTS, the masked `|| true` removed from the Maven format task, and Corepack (no longer shipped from Node 25) replaced by mise-pinned pnpm/yarn.
 - GitHub Actions and pre-commit hooks pinned by commit SHA; image names fully qualified; Podman only (ADR 0003).
 - Releases: attestation runs in its own job without project code, and is skipped on private repos; rc tags become pre-releases.
 - Scan exceptions limited to 90 days; `trivy.yaml`/VEX files refused.
 - Dev container and notebooks lab map the host user to `app`; `.git` is read-only in the lab; git hooks are installed on the host only.
 - Production services hide `/docs` and `/openapi.json`.
+- Python 3.15 is the default (`3.14` and `3.13` remain choices); every dependency installs from wheels on 3.15 on macOS arm64 and Linux amd64/arm64.
+- Dependency floors raised to the latest releases. The v1 floors allowed 7 packages with 34 published advisories (jupyterlab, starlette via fastapi, setuptools, nbconvert, jupyterlab-git, pytest, python-dotenv). Major upgrades: mypy 2, pytest 9, pytest-asyncio 1, pandas 3, rich 15, ipykernel 7, setuptools 84.
+- Services add `httpx2` to the dev group: Starlette 1.10 deprecates `httpx` as the TestClient backend.
+- mise 2026.11.14 in CI; `packaging` pinned to 26.4 in the release tag check.
 
 ### Removed
 - `template-python-projects/` and `template-jupyterlab-projects/` (replaced by `template/`).

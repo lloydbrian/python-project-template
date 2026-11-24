@@ -20,7 +20,7 @@ on:
       mise-version:
         description: mise release used to install the repo's pinned tools
         type: string
-        default: "2026.11.13"
+        default: "2026.11.14"
 
 permissions:
   contents: read

@@ -242,13 +242,22 @@ CONTROLS = [
 def sh(cmd: str, cwd: Path) -> tuple[int, str]:
     env = dict(os.environ)
     env.pop("VIRTUAL_ENV", None)
+    # No .pyc files: a mutation and its restore can land in the same second with the same file
+    # size, and Python would then reuse the mutated bytecode (pyc staleness is mtime + size).
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     proc = subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True, text=True)
     return proc.returncode, proc.stdout + proc.stderr
 
 
 def restore(where: Path) -> None:
     # reset --hard to the pristine commit also undoes controls that commit (secret-detection)
-    subprocess.run("git reset -q --hard pristine && git clean -fdq", shell=True, cwd=where, check=True)
+    subprocess.run(
+        "git reset -q --hard pristine && git clean -fdq"
+        " && find . -path ./.venv -prune -o -name __pycache__ -type d -exec rm -rf {} +",
+        shell=True,
+        cwd=where,
+        check=True,
+    )
     _rc, out = sh("git status --porcelain", where)
     if out.strip():
         raise SystemExit(f"restore failed in {where}:\n{out}")
@@ -261,7 +270,7 @@ def prepare(work: Path) -> tuple[Path, Path]:
         check=True,
         stdout=subprocess.DEVNULL,
     )
-    env_py = "3.14"
+    env_py = "3.15"
     for cmd in (
         "git init -q && git add -A && git -c user.name=nc -c user.email=nc@example.invalid commit -qm render",
         f"UV_PYTHON={env_py} uv lock -q && UV_PYTHON={env_py} uv sync -q --locked",

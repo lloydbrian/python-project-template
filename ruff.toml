@@ -1,5 +1,5 @@
 # Lint settings for the maintainer scripts in scripts/ (template/ is checked after rendering).
-target-version = "py314"
+target-version = "py315"
 line-length = 120
 extend-exclude = ["template", ".render"]
 

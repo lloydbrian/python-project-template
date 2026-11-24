@@ -35,6 +35,11 @@ VARIANTS: dict[str, dict[str, object]] = {
         "license": "MIT",  # exercises LICENSE in the image build context
     },
     "notebooks": {"project_name": "Ref Notebooks", "project_type": "notebooks"},
+    "service-py314": {
+        "project_name": "Ref Service 314",
+        "project_type": "service",
+        "python_version": "3.14",
+    },
     "service-py313": {
         "project_name": "Ref Service 313",
         "project_type": "service",
@@ -136,7 +141,7 @@ def gates(data: dict[str, object], out: Path, runner: str) -> None:
         for task in ("install", "run bootstrap", "run ci", "run security"):
             run(f"mise {task}", cwd=out, env=env)
     else:
-        env["UV_PYTHON"] = str(data.get("python_version", "3.14"))
+        env["UV_PYTHON"] = str(data.get("python_version", "3.15"))
         group = " --group notebooks" if ptype == "notebooks" else ""
         for cmd in (
             "uv lock -q",
