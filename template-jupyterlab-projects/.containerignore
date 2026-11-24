@@ -11,3 +11,4 @@
 .mypy_cache/
 data/
 *-image.tar
+**/*.egg-info/
