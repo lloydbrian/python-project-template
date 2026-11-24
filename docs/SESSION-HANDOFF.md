@@ -24,7 +24,7 @@
 | Check | Result |
 |---|---|
 | Render + gates, 8 variants including both AI stacks (lint, format, mypy strict, pytest + coverage, pip-audit, bandit, full-history gitleaks, image-stage simulation) on 3.15, 3.14, 3.13 | 8/8 PASS |
-| Negative controls | 22/22 caught |
+| Negative controls | 23/23 caught |
 | `copier update` test (template change arrives, local edit kept, computed ref moves, no conflicts) | PASS |
 | actionlint, root pre-commit, gitleaks, pin policy (actions + hooks by SHA, versions agree) | PASS |
 | Independent review: correctness, security, operability, docs accuracy | 2 critical (one reported by two reviewers, one found while fixing), 14 major, about 35 minor (unique): all fixed |

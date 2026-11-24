@@ -204,7 +204,7 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`, VEX file or `TRIVY_*` setting in `.mise.toml` that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 22 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, and the project-name validator. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 23 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, paste-unsafe doc commands, and the project-name validator. A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -372,6 +372,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 │   ├── image_sim.py              build-context check of the Containerfile without a container engine
 │   ├── negative_controls.py      prove every gate can fail
 │   ├── update_test.py            prove copier update works
+│   ├── check_shell_snippets.py  doc commands stay paste-safe in zsh and bash (no history expansion)
 │   ├── check_pins.py             SHA-pinned actions, tagged images, version agreement, release checks
 │   ├── pin_images.sh             resolve base-image digests (operator, dry run by default)
 │   └── changelog_section.py      release notes from CHANGELOG.md
@@ -418,7 +419,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 22 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | 23 negative controls in template CI |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 26 LTS (no Corepack: Node 25+ dropped it), Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |

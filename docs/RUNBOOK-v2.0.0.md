@@ -15,6 +15,8 @@ Each step has a **pre-flight** (check before), the **command**, **Expect** (what
 
 **No secrets are needed** except your existing `gh` login (keychain). If a step ever needs a token, declare it into a variable without echoing it (`read -rs GH_TOKEN && export GH_TOKEN`) and `unset GH_TOKEN` afterwards. Never put a token in a file, a commit or a chat. `~/.runbook-v2.env` holds folder paths and your GitHub owner name only.
 
+**Shell safety:** interactive zsh and bash treat `!` inside double quotes as a history reference (`zsh: illegal modifier`). Every command here single-quotes such text, and `~/.runbook-v2.env` also turns history expansion off for the shell that loads it. `mise run lint` rejects new doc commands that would trip on it.
+
 **Redact before sharing output:**
 
 ```bash
@@ -36,6 +38,8 @@ export REF="$REPOS/template-repo"
 export OWNER="lloydbrian"
 # Copier at the pinned version, without a global install (works in zsh and bash)
 copier() { uvx --from copier==9.19.1 copier "$@"; }
+# Commands below contain "!" (e.g. 'feat!:'): turn off history expansion in this shell.
+if [ -n "${ZSH_VERSION:-}" ]; then setopt NO_BANG_HIST; elif [ -n "${BASH_VERSION:-}" ]; then set +H; fi
 redact() { sed -E -e "s#$HOME#~#g" -e 's/[0-9]{12}/<ACCOUNT>/g' -e 's/gh[pousr]_[A-Za-z0-9]{20,}/<TOKEN>/g' -e 's/([0-9]{1,3}\.){3}[0-9]{1,3}/<IP>/g'; }
 ENV
 source "$HOME/.runbook-v2.env" && cd "$REPOS" && pwd
@@ -118,7 +122,7 @@ done
 ```
 
 **Expect:**
-- `render-test <variant>: PASS` for all 8 variants, then `negative controls: 22/22 caught`, `update-test: ... PASS` and `check_pins: OK`;
+- `render-test <variant>: PASS` for all 8 variants, then `negative controls: 23/23 caught`, `update-test: ... PASS` and `check_pins: OK`;
 - each container run passes; `service` and `service-py313` print `smoke: OK`;
 - the two AI variants print `baked model: OK (offline, read-only)`;
 - trivy prints `Total:` lines and exits 0. It fails only on fixable HIGH or CRITICAL findings.
@@ -167,7 +171,7 @@ grep -n -A3 '^template_ref:' copier.yml                                 # defaul
 python3 scripts/check_pins.py --release --tag v2.0.0-rc.1               # check_pins: OK (release)
 git commit -am "chore: release candidate v2.0.0-rc.1"
 git push -u origin feat/v2-copier-template
-gh pr create --base main --title "feat!: python-project-template v2.0.0 (Copier)" --body-file docs/PR-v2.0.0.md
+gh pr create --base main --title 'feat!: python-project-template v2.0.0 (Copier)' --body-file docs/PR-v2.0.0.md
 sleep 20 && gh pr checks --watch
 ```
 
@@ -263,7 +267,7 @@ copier copy --vcs-ref v2.0.0-rc.1 --data-file "$DL/template-repo.answers.yml" --
 mise trust && mise install && mise run bootstrap
 mise run ci && REQUIRE_CONTAINER=1 mise run image && mise run scan && mise run smoke
 grep -E '_commit|_src_path' .copier-answers.yml
-git add -A && git commit -m "feat!: regenerate from python-project-template v2.0.0-rc.1"
+git add -A && git commit -m 'feat!: regenerate from python-project-template v2.0.0-rc.1'
 ```
 
 **About `git rm -r -q .`:** it stages deletion of tracked files on the new branch only. Untracked and ignored files (`.env.dev`, `.venv`) are not touched, and `main` keeps every file. To undo before committing: `git switch -f main && git branch -D feat/v2-generated`.
@@ -277,7 +281,7 @@ git add -A && git commit -m "feat!: regenerate from python-project-template v2.0
 ```bash
 source "$HOME/.runbook-v2.env" && cd "$REF" && pwd
 git push -u origin feat/v2-generated
-gh pr create --base main --title "feat!: regenerate from python-project-template v2.0.0-rc.1" --fill
+gh pr create --base main --title 'feat!: regenerate from python-project-template v2.0.0-rc.1' --fill
 sleep 20 && gh pr checks --watch
 ```
 
@@ -381,5 +385,5 @@ When everything is done, remove the settings file: `rm ~/.runbook-v2.env` (paths
 After step 10, append to `docs/RELEASES.md` in the template repo:
 
 ```text
-2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 8/8 variants, 22/22 controls, update PASS
+2026-11-xx  v2.0.0  <commit>  lead time: <first commit → tag>  fix-forward/rollback: none  gates: 8/8 variants, 23/23 controls, update PASS
 ```

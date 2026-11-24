@@ -250,6 +250,17 @@ CONTROLS = [
         where="template",
     ),
     Control(
+        "doc-command-history-expansion",
+        'a doc command with "!" in double quotes (zsh: illegal modifier) fails the doc lint',
+        "python3 scripts/check_shell_snippets.py",
+        lambda p: (
+            (p / "docs" / "zsh-trap.md").write_text('```bash\ngit commit -m "feat!: breaks in zsh"\n```\n'),
+            subprocess.run("git add docs/zsh-trap.md", shell=True, cwd=p, check=True),
+        ),
+        marker="would be history-expanded",
+        where="template",
+    ),
+    Control(
         "name-validator",
         "a project name that would break TOML/Python is refused at question time",
         "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"

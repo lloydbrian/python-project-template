@@ -14,11 +14,12 @@ COPIER = "uvx --from copier==9.19.1 copier"   # one Copier version for every mai
 PYTHONDONTWRITEBYTECODE = "1"
 
 [tasks.lint]
-description = "Template repo hygiene: hooks, workflow lint, pin policy, nothing in template/ ignored"
+description = "Template repo hygiene: hooks, workflow lint, pin policy, paste-safe doc commands, nothing in template/ ignored"
 run = """
 uvx pre-commit run --all-files
 actionlint
 python3 scripts/check_pins.py
+python3 scripts/check_shell_snippets.py
 ignored="$(git status --ignored --porcelain template/ | grep '^!!' || true)"
 [ -z "$ignored" ] || { echo "files under template/ are git-ignored and would never ship:"; echo "$ignored"; exit 1; }
 """
