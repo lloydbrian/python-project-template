@@ -21,7 +21,8 @@ Future AI projects need retrieval: a vector store, embeddings, PDF text extracti
 - `ai_stack` is asked **before** `python_version`. With `chromadb`, the Python default becomes 3.14, and 3.15 is a disabled choice that states the reason (and is refused with `--data`).
 - Both stacks add `pdfplumber` and `tavily-python`, and the same `rag.DocumentStore` interface (`add`, `search`, `count`), so changing stores touches one file.
 - Both use the **same embedding model**, so search behaviour stays comparable across a switch. The model is baked into container images at build time (`HF_HUB_OFFLINE=1`), so containers never download it.
-- ChromaDB projects ship `.pip-audit-ignore`, one line per server-only advisory with a reason, an owner and `expires: on-bootstrap`. `mise run bootstrap` dates each line to today + 90 days. The audit then ignores only those IDs, and fails once they expire (ADR 0006 rules). ChromaDB telemetry is turned off.
+- `data/` is git-ignored whenever an AI stack is chosen, and the service's read-only container gets a `vectors` volume for the store. `mise run image` embeds and searches inside the image with `--network=none` to prove the model was baked in.
+- ChromaDB projects ship `.pip-audit-ignore`, one line per server-only advisory with a reason, an owner and `expires: on-bootstrap`. `mise run bootstrap` dates each line to today + 90 days. The audit then ignores only those IDs, and fails once they expire (ADR 0006 rules). The exceptions are valid only while the project uses the embedded client, opens only stores it created, and installs no Hugging Face embedding function: the advisories' code-injection path is an embedding function named in a store's saved configuration. ChromaDB telemetry is turned off.
 
 ## Alternatives considered
 - *ChromaDB for everyone*: impossible on 3.15, and it fails the audit gate without exceptions.

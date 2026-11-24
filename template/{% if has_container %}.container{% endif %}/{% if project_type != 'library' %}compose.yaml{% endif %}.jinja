@@ -18,6 +18,10 @@ services:
       APP_ENV: dev
     read_only: true
     tmpfs: [/tmp]
+{%- if ai_kind != "none" %}
+    volumes:
+      - vectors:/home/app/data          # the only writable path: the vector store (VECTOR_STORE_PATH)
+{%- endif %}
     cap_drop: [ALL]
     security_opt: [no-new-privileges]
     healthcheck:                      # the image has no curl: probe with Python
@@ -26,6 +30,11 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+{%- if ai_kind != "none" %}
+
+volumes:
+  vectors:                            # podman volume: survives `compose down`; `down -v` deletes it
+{%- endif %}
 {%- else %}
 # JupyterLab in a container, using the dev stage so edits in src/ are importable immediately.
 # Open the tokenized URL printed in the logs; keep token authentication on.

@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field{% if ai_stack != 'none' %}, SecretStr{% endif %}
+from pydantic import Field{% if ai_kind != 'none' %}, SecretStr{% endif %}
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["dev", "test", "prod"]
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
     log_json: bool = True
     http_port: int = Field(default={{ http_port }}, ge=1024, le=65535)
-{%- if ai_stack != 'none' %}
+{%- if ai_kind != 'none' %}
     vector_store_path: str = "data/vectors"
     # SecretStr keeps the key out of logs, reprs and `config` output (.get_secret_value() reads it)
     tavily_api_key: SecretStr | None = None

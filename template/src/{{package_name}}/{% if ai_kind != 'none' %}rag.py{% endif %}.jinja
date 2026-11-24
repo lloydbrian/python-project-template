@@ -1,7 +1,7 @@
 """Retrieval helpers: a small document store, PDF text extraction and text chunking.
 
 Why a wrapper: the rest of the code depends on `DocumentStore.add()` and `.search()`, not on
-{% if ai_stack == "lancedb" %}LanceDB{% else %}ChromaDB{% endif %}'s own API, so changing the vector store (for example ChromaDB -> LanceDB to move to
+{% if ai_kind == "lancedb" %}LanceDB{% else %}ChromaDB{% endif %}'s own API, so changing the vector store (for example ChromaDB -> LanceDB to move to
 Python 3.15) touches this one file.
 
 Embeddings run locally with all-MiniLM-L6-v2: 384 dimensions, English-focused, and input longer
@@ -11,13 +11,16 @@ model (about 80 MB) is downloaded on first use and cached; container images bake
 
 from __future__ import annotations
 
+{% if project_type != "service" -%}
+import os
+{% endif -%}
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any{% if ai_stack == 'lancedb' %}, cast{% endif %}
+from typing import Any{% if ai_kind == 'lancedb' %}, cast{% endif %}
 from uuid import uuid4
 
-{%- if ai_stack == "lancedb" %}
+{%- if ai_kind == "lancedb" %}
 
 import lancedb
 from lancedb.embeddings import EmbeddingFunction, get_registry
@@ -32,6 +35,17 @@ from chromadb.config import Settings
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
 
 
+def default_store_path() -> str:
+    """VECTOR_STORE_PATH{% if project_type == "service" %} (service settings){% endif %}, else data/vectors (git-ignored)."""
+{%- if project_type == "service" %}
+    from {{ package_name }}.config import get_settings
+
+    return get_settings().vector_store_path
+{%- else %}
+    return os.environ.get("VECTOR_STORE_PATH", "data/vectors")
+{%- endif %}
+
+
 @dataclass(frozen=True)
 class Hit:
     """One search result. `distance`: lower means closer to the query."""
@@ -41,7 +55,7 @@ class Hit:
     distance: float
 
 
-{%- if ai_stack == "lancedb" %}
+{%- if ai_kind == "lancedb" %}
 
 
 # LanceDB's embedding helpers (create, SourceField, VectorField) are untyped, hence the targeted
@@ -56,11 +70,11 @@ def default_embedder() -> EmbeddingFunction:
 
 
 class DocumentStore:
-    """Embedded LanceDB table (files under `path`, no server). Embeds text on add and search."""
+    """Embedded LanceDB table (files under `path`, default VECTOR_STORE_PATH; no server)."""
 
     def __init__(
         self,
-        path: str | Path = "data/vectors",
+        path: str | Path | None = None,
         table: str = "documents",
         embedder: EmbeddingFunction | None = None,
     ) -> None:
@@ -71,7 +85,7 @@ class DocumentStore:
             text: str = emb.SourceField()  # type: ignore[no-untyped-call]
             vector: Vector(emb.ndims()) = emb.VectorField()  # type: ignore[valid-type,no-untyped-call]
 
-        db = lancedb.connect(str(path))
+        db = lancedb.connect(str(path or default_store_path()))
         self._table = db.create_table(table, schema=Document, exist_ok=True)
 
     def add(self, texts: Sequence[str], ids: Sequence[str] | None = None) -> list[str]:
@@ -98,18 +112,19 @@ def warm_up() -> None:  # pragma: no cover - downloads the model; run by the ima
 class DocumentStore:
     """Embedded ChromaDB collection (files under `path`, no server).
 
-    Only the embedded `PersistentClient` is used. Do not run ChromaDB as a server: the advisories
-    excepted in `.pip-audit-ignore` affect the server, which is why they are acceptable here.
+    Only the embedded `PersistentClient` is used. Do not run ChromaDB as a server, and only open
+    vector stores this project created: a store's saved collection settings name the embedding
+    function that loads it, which is how the advisories excepted in `.pip-audit-ignore` inject code.
     """
 
     def __init__(
         self,
-        path: str | Path = "data/vectors",
+        path: str | Path | None = None,
         collection: str = "documents",
         embedder: EmbeddingFunction[Documents] | None = None,
     ) -> None:
         client = chromadb.PersistentClient(
-            path=str(path),
+            path=str(path or default_store_path()),
             settings=Settings(anonymized_telemetry=False),  # no usage data leaves this machine
         )
         # No embedder given: Chroma's built-in all-MiniLM-L6-v2 (ONNX, CPU) is used.
@@ -152,6 +167,8 @@ def chunk_text(text: str, max_words: int = 180, overlap: int = 30) -> list[str]:
     if max_words <= overlap or overlap < 0:
         raise ValueError("need max_words > overlap >= 0")
     words = text.split()
+    if not words:
+        return []  # e.g. a scanned PDF with no text layer: nothing to embed
     step = max_words - overlap
     return [
         " ".join(words[i : i + max_words]) for i in range(0, max(len(words) - overlap, 1), step)

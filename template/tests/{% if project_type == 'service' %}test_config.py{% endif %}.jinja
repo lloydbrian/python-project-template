@@ -41,7 +41,7 @@ def test_invalid_environment_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("LOG_LEVEL", "NOPE")
     with pytest.raises(ValidationError):
         get_settings()
-{%- if ai_stack != "none" %}
+{%- if ai_kind != "none" %}
 
 
 def test_tavily_key_is_masked() -> None:

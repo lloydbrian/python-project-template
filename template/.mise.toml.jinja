@@ -57,7 +57,17 @@ uv run --group security bandit -q -r src
 
 [tasks.image]
 description = "Build the {% if project_type == 'notebooks' %}lab{% else %}production{% endif %} image with Podman from a fresh base"
+{%- if ai_kind == "none" %}
 run = "podman build --pull=newer -f .container/Containerfile --target {% if project_type == 'notebooks' %}lab{% else %}prod{% endif %} -t {{ project_slug }}:dev ."
+{%- else %}
+run = """
+set -eu
+podman build --pull=newer -f .container/Containerfile --target {% if project_type == 'notebooks' %}lab{% else %}prod{% endif %} -t {{ project_slug }}:dev .
+# The embedding model must be baked in: embed and search with no network on a read-only filesystem
+podman run --rm --read-only --tmpfs /tmp --network=none --cap-drop=ALL {% if project_type == 'notebooks' %}--entrypoint python {{ project_slug }}:dev{% else %}{{ project_slug }}:dev python{% endif %} -c \\
+  "from {{ package_name }}.rag import DocumentStore; s = DocumentStore('/tmp/v'); s.add(['offline check']); assert s.search('offline', k=1); print('baked model: OK (offline, read-only)')"
+"""
+{%- endif %}
 
 [tasks.scan]
 description = "Fail on fixable HIGH/CRITICAL vulnerabilities; honours documented, unexpired exceptions"

@@ -67,3 +67,10 @@ def test_pip_audit_args_only_for_documented_entries(tmp_path: Path) -> None:
     )
     assert _mod.pip_audit_args(f) == ["--ignore-vuln", "PYSEC-2026-1"]
     assert _mod.pip_audit_args(tmp_path / "missing") == []
+
+
+def test_stamp_tolerates_spacing(tmp_path: Path) -> None:
+    f = tmp_path / ".pip-audit-ignore"
+    f.write_text("PYSEC-2026-1  # reason: server only; owner: lbd; expires:on-bootstrap\n")
+    assert _mod.stamp(f, today=date(2026, 1, 1)) == 1
+    assert _mod.check(f, today=date(2026, 1, 1)) == []

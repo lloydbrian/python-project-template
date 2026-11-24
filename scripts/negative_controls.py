@@ -242,7 +242,9 @@ CONTROLS = [
         "! ${COPIER:-uvx --from copier==9.19.1 copier} copy --defaults --quiet --vcs-ref HEAD"
         " --data project_name=x --data ai_stack=chromadb --data python_version=3.15 . $(mktemp -d)/x",
         lambda p: edit(
-            p / "copier.yml", "{% if ai_stack == 'chromadb' %}ChromaDB needs", "{% if false %}ChromaDB needs"
+            p / "copier.yml",
+            "{% if ai_stack == 'chromadb' and project_type != 'library' %}ChromaDB needs",
+            "{% if false %}ChromaDB needs",
         ),
         marker="",
         where="template",

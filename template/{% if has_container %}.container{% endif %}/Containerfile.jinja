@@ -52,11 +52,11 @@ FROM python-base AS lab
 COPY --from=build /opt/venv /opt/venv
 USER app
 WORKDIR /home/app/work
-{%- if ai_stack != "none" %}
+{%- if ai_kind != "none" %}
 # Bake the embedding model into the image as the runtime user, so containers never download it:
 # they start offline and work with a read-only root filesystem. Needs network at build time only.
 RUN python -c "from {{ package_name }}.rag import warm_up; warm_up()"
-ENV HF_HUB_OFFLINE=1{% if ai_stack == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
+ENV HF_HUB_OFFLINE=1{% if ai_kind == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
 {%- endif %}
 EXPOSE 8888
 CMD ["jupyter", "lab", "--ip", "0.0.0.0", "--port", "8888", "--no-browser"]
@@ -66,11 +66,11 @@ FROM python-base AS prod
 COPY --from=build /opt/venv /opt/venv
 USER app
 WORKDIR /home/app
-{%- if ai_stack != "none" %}
+{%- if ai_kind != "none" %}
 # Bake the embedding model into the image as the runtime user, so containers never download it:
 # they start offline and work with a read-only root filesystem. Needs network at build time only.
 RUN python -c "from {{ package_name }}.rag import warm_up; warm_up()"
-ENV HF_HUB_OFFLINE=1{% if ai_stack == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
+ENV HF_HUB_OFFLINE=1{% if ai_kind == "chromadb" %} ANONYMIZED_TELEMETRY=False{% endif %}
 {%- endif %}
 {%- if project_type == "service" %}
 EXPOSE {{ http_port }}

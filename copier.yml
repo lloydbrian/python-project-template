@@ -11,7 +11,7 @@ _answers_file: .copier-answers.yml
 _templates_suffix: .jinja
 _message_after_copy: |
 
-  Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}{% if ai_stack != 'none' %}, AI stack: {{ ai_stack }}{% endif %}).
+  Project "{{ project_name }}" created ({{ project_type }}, Python {{ python_version }}{% if ai_kind != 'none' %}, AI stack: {{ ai_kind }}{% endif %}).
 
   Next steps (details in README.md):
     1. cd {{ _copier_conf.dst_path }} && git init
@@ -96,11 +96,11 @@ python_version:
     "3.15":
       value: "3.15"
       validator: >-
-        {% if ai_stack == 'chromadb' %}ChromaDB needs onnxruntime, which has no Python 3.15
+        {% if ai_stack == 'chromadb' and project_type != 'library' %}ChromaDB needs onnxruntime, which has no Python 3.15
         wheels yet: pick 3.14, or choose LanceDB as the AI stack{% endif %}
     "3.14": "3.14"
     "3.13": "3.13"
-  default: "{{ '3.14' if ai_stack == 'chromadb' else '3.15' }}"
+  default: "{{ '3.14' if ai_stack == 'chromadb' and project_type != 'library' else '3.15' }}"
 
 github_owner:
   type: str
@@ -175,6 +175,13 @@ uv_version:
 trivy_version:
   type: str
   default: 0.76.2
+  when: false
+
+# The AI stack actually rendered: ai_stack only counts for services and notebooks, so a stray
+# `--data ai_stack=...` on a library cannot add files that the answers file would not record.
+ai_kind:
+  type: str
+  default: "{{ ai_stack if project_type in ['service', 'notebooks'] else 'none' }}"
   when: false
 
 gitleaks_version:

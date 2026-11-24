@@ -24,7 +24,7 @@
 {%- if nb %}
 [Notebooks](#working-with-notebooks) ·
 {%- endif %}
-{%- if ai_stack != 'none' %}
+{%- if ai_kind != 'none' %}
 [AI stack](#ai-stack) ·
 {%- endif %}
 {%- if has_container %}
@@ -197,7 +197,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 {%- if has_container %}
 ├── .containerignore       keeps .git, .venv, secrets and caches out of the build context
 ├── .trivyignore           time-boxed vulnerability exceptions (empty by default)
-{%- if ai_stack == 'chromadb' %}
+{%- if ai_kind == 'chromadb' %}
 ├── .pip-audit-ignore      time-boxed exceptions for ChromaDB's server-only advisories
 {%- endif %}
 {%- endif %}
@@ -217,20 +217,20 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 {%- if svc %}
 │   ├── config.py          typed Settings; fails fast on bad values
 │   ├── logging_config.py  JSON logs with request ID
-│   {% if ai_stack != 'none' %}├──{% else %}└──{% endif %} main.py            create_app() factory, health endpoints, request-ID middleware
+│   {% if ai_kind != 'none' %}├──{% else %}└──{% endif %} main.py            create_app() factory, health endpoints, request-ID middleware
 {%- elif lib %}
 │   ├── core.py            the library's public functions
 │   └── py.typed           tells type checkers this package ships types (PEP 561)
 {%- else %}
-│   {% if ai_stack != 'none' %}├──{% else %}└──{% endif %} helpers.py         tested helpers that notebooks import
+│   {% if ai_kind != 'none' %}├──{% else %}└──{% endif %} helpers.py         tested helpers that notebooks import
 {%- endif %}
-{%- if ai_stack != 'none' %}
-│   ├── rag.py             DocumentStore ({{ 'LanceDB' if ai_stack == 'lancedb' else 'ChromaDB' }}), chunk_text, pdf_text
+{%- if ai_kind != 'none' %}
+│   ├── rag.py             DocumentStore ({{ 'LanceDB' if ai_kind == 'lancedb' else 'ChromaDB' }}), chunk_text, pdf_text
 │   └── web_search.py      Tavily web search (key from TAVILY_API_KEY)
 {%- endif %}
 ├── tests/
 {%- if has_container %}
-└── tools/check_scan_exceptions.py   rejects undocumented or expired .trivyignore{% if ai_stack == 'chromadb' %}/.pip-audit-ignore{% endif %} entries
+└── tools/check_scan_exceptions.py   rejects undocumented or expired .trivyignore{% if ai_kind == 'chromadb' %}/.pip-audit-ignore{% endif %} entries
 {%- endif %}
 ```
 
@@ -348,17 +348,17 @@ podman compose -f .container/compose.yaml up     # or in a container on 127.0.0.
 - Optional extras for rendering and graphs: `brew install pandoc graphviz`; the `docs` extra adds the Python side (`uv sync --extra docs`).
 {%- endif %}
 
-{%- if ai_stack != 'none' %}
+{%- if ai_kind != 'none' %}
 
 ---
 
 ## AI stack
 
-This project was generated with **{{ 'LanceDB + sentence-transformers' if ai_stack == 'lancedb' else 'ChromaDB with its built-in embedder' }}**, plus pdfplumber for PDFs and Tavily for web search. The code is in `src/{{ package_name }}/rag.py` and `web_search.py`; the tests run offline.
+This project was generated with **{{ 'LanceDB + sentence-transformers' if ai_kind == 'lancedb' else 'ChromaDB with its built-in embedder' }}**, plus pdfplumber for PDFs and Tavily for web search. The code is in `src/{{ package_name }}/rag.py` and `web_search.py`; the tests run offline.
 
 | Piece | Where | Why this one |
 |---|---|---|
-{%- if ai_stack == 'lancedb' %}
+{%- if ai_kind == 'lancedb' %}
 | **Vector store: LanceDB** | `rag.DocumentStore` | Embedded: files under `data/vectors`, no server to run or secure. Its index lives on disk, so it handles data larger than memory, and it installs from wheels on every offered Python, including 3.15 (template ADR 0012) |
 | **Embeddings: sentence-transformers** | `rag.default_embedder()` | Runs all-MiniLM-L6-v2 locally on the CPU through LanceDB's embedding registry: no API key, no per-call cost, and text never leaves the machine |
 {%- else %}
@@ -382,9 +382,9 @@ for hit in store.search("What changed in Q3?", k=3):
 
 **The embedding model** (all-MiniLM-L6-v2, 384 dimensions, English-focused):
 
-- The first use downloads it (about 80 MB) {% if ai_stack == 'lancedb' %}from Hugging Face into `~/.cache/huggingface`{% else %}from Chroma's model bucket into `~/.cache/chroma/onnx_models` (checked against a SHA-256){% endif %}. After that it works offline.
-- Container images **bake the model in** at build time, as the `app` user, and set `HF_HUB_OFFLINE=1`. Containers never download anything, so they start offline with a read-only root filesystem. Only the image build needs network access.
-{%- if ai_stack == 'lancedb' %}
+- The first use downloads it (about 80 MB) {% if ai_kind == 'lancedb' %}from Hugging Face into `~/.cache/huggingface`{% else %}from Chroma's model bucket into `~/.cache/chroma/onnx_models` (checked against a SHA-256){% endif %}. After that it works offline.
+- Container images **bake the model in** at build time, as the `app` user{% if ai_kind == 'lancedb' %}, and set `HF_HUB_OFFLINE=1`{% endif %}. Only the image build needs network access. `mise run image` then proves it: it embeds and searches inside the new image with `--network=none` on a read-only filesystem, and fails if the model is missing.
+{%- if ai_kind == 'lancedb' %}
 - sentence-transformers depends on PyTorch, so installs and images are large: the torch wheel alone is about 140 MB on macOS and 540 MB on Linux.
 - To change model or provider, edit `default_embedder()`. LanceDB's registry also has `openai`, `voyageai`, `ollama` and `huggingface` embedders. Every store keeps the model it was created with, so re-index after changing it.
 {%- else %}
@@ -392,8 +392,10 @@ for hit in store.search("What changed in Q3?", k=3):
 {%- endif %}
 - Tests use a deterministic fake embedder and never download a model. `uv run pytest -m live` exercises the real model and, with `TAVILY_API_KEY` set, real web search.
 
-**Secrets:** put `TAVILY_API_KEY` in `.env.dev` locally (git-ignored). In a container, pass it as a Podman secret (see [Configuration and secrets](#configuration-and-secrets)). Never put it in `.env.example`, code or a notebook cell.
-{%- if ai_stack == 'chromadb' %}
+**Where things live:** `VECTOR_STORE_PATH` (default `data/vectors`, git-ignored) holds the store{% if svc %}. The production container's root filesystem is read-only, so compose mounts a `vectors` volume at `/home/app/data` as its only writable path{% endif %}.
+
+**Secrets:** put `TAVILY_API_KEY` in `.env.dev` locally (git-ignored); {% if svc %}the settings read it as a `SecretStr`{% else %}`search_web()` reads it from there when no environment variable is set{% endif %}. In a container, pass it as a Podman secret (see [Configuration and secrets](#configuration-and-secrets)). Never put it in `.env.example`, code or a notebook cell.
+{%- if ai_kind == 'chromadb' %}
 
 **Why Python {{ python_version }} and not 3.15:** ChromaDB always installs onnxruntime to run its built-in model, and onnxruntime has no Python 3.15 wheels yet (it publishes no source package to build from). The template therefore refuses ChromaDB with 3.15. Two ways forward:
 
@@ -406,6 +408,7 @@ for hit in store.search("What changed in Q3?", k=3):
 - `mise run security` and `mise run ci` validate the file, then ignore **only** those IDs. Any other finding still fails.
 - When an entry expires, the audit fails. Check whether a newer chromadb fixes it (`uv lock --upgrade-package chromadb`), then delete the line, or renew it with a fresh assessment and a new date.
 - **Never run ChromaDB as a server** (`chroma run`, or exposing it on a network). The exceptions would no longer be true: delete them and move to LanceDB or a fixed release.
+- **Only open vector stores this project created.** A store's saved collection settings name the embedding function used to load it, which is the injection path behind two of the advisories. Never point `DocumentStore` at a store from an untrusted source, and do not add Hugging Face embedding functions (for example sentence-transformers) to a ChromaDB project.
 {%- endif %}
 {%- endif %}
 
@@ -576,12 +579,12 @@ mise run bootstrap && mise run ci
 | `trivy` fails with expired or undocumented exceptions | Fix the finding or renew the `.trivyignore` entry with a new reason, owner and expiry |
 | VS Code dev container tries to use Docker | In your **user** settings set `"dev.containers.dockerPath": "podman"` |
 | `scan`: "trivy config files are not allowed" | Remove `trivy.yaml` or VEX files; record exceptions in `.trivyignore` instead |
-{%- if ai_stack == "chromadb" %}
+{%- if ai_kind == "chromadb" %}
 | `security`: "... is not dated yet; run `mise run bootstrap`" | New `.pip-audit-ignore` entries are dated on first bootstrap: run it and commit the file |
 | `security`: "PYSEC-... expired on ..." | Check for a fixed chromadb (`uv lock --upgrade-package chromadb`); delete the line if fixed, or renew it with a new assessment and date |
 {%- endif %}
-{%- if ai_stack != "none" %}
-| Container: "We couldn't connect to huggingface.co" or offline-mode errors | The model was not baked in: rebuild the image with network access (`mise run image`); the build downloads it once |
+{%- if ai_kind != "none" %}
+| `mise run image` fails at "baked model" | The model was not baked in, usually because the build had no network access. Rebuild with network; the build downloads the model once |
 | Slow first `DocumentStore()` locally | First use downloads the embedding model (about 80 MB); later runs use the cache |
 {%- endif %}
 {%- endif %}

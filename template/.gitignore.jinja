@@ -304,9 +304,9 @@ desktop.ini
 
 # --- AI assistant scratch output ----------------------------------------------
 Claude outputs/
-{%- if project_type == "notebooks" %}
+{%- if project_type == "notebooks" or ai_kind != "none" %}
 
-# --- Notebook data (local only) ----------------------------------------------
+# --- Local data: notebook data, vector stores, model caches (never committed) --
 data/
 {%- endif %}
 

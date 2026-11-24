@@ -74,7 +74,7 @@ def stamp(path: Path, today: date | None = None) -> int:
     for i, line in enumerate(lines):  # entry lines only: comments are left untouched
         match = ENTRY.match(line.strip())
         if match and match["expires"] == "on-bootstrap":
-            lines[i] = line.replace("expires: on-bootstrap", f"expires: {expires}")
+            lines[i] = re.sub(r"expires:\s*on-bootstrap", f"expires: {expires}", line)
             count += 1
     if count:
         path.write_text("".join(lines), encoding="utf-8")
