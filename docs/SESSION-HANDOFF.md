@@ -17,7 +17,7 @@
 - No GHCR or registry publishing.
 - Python 3.15 default; 3.14 and 3.13 offered (decided 2026-11-24, after confirming every dependency installs from wheels on 3.15).
 - Dependency floors at the latest releases, never below a security fix (2026-11-24).
-- Optional AI stack (2026-11-24): LanceDB + sentence-transformers (any Python) or ChromaDB (Python ≤3.14, onnxruntime has no 3.15 wheels), each with pdfplumber and Tavily; ChromaDB's server-only advisories handled as time-boxed exceptions (ADR 0012).
+- Optional AI stack (2026-11-24): LanceDB + model2vec (any Python, no PyTorch; replaced sentence-transformers after review found ~5 GB CUDA images) or ChromaDB (Python ≤3.14, onnxruntime has no 3.15 wheels), each with pdfplumber and Tavily; ChromaDB's server-only advisories handled as time-boxed exceptions (ADR 0012).
 - READMEs stay detailed: every tool and step carries its "why".
 
 ## Verification

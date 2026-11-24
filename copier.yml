@@ -78,13 +78,13 @@ author_name:
 ai_stack:
   type: str
   help: >-
-    AI retrieval stack: a vector store with local embeddings (all-MiniLM-L6-v2), PDF text
-    extraction (pdfplumber) and web search (Tavily). It also decides the Python versions
+    AI retrieval stack: a vector store with local embeddings, PDF text extraction
+    (pdfplumber) and web search (Tavily). It also decides the Python versions
     offered next: ChromaDB needs onnxruntime, which has no Python 3.15 wheels yet.
   choices:
     None: none
-    LanceDB + sentence-transformers (any Python, including 3.15): lancedb
-    ChromaDB with its built-in embedder (Python 3.14 or older): chromadb
+    LanceDB + model2vec embeddings (any Python, including 3.15; small, no PyTorch): lancedb
+    ChromaDB with its built-in all-MiniLM-L6-v2 (Python 3.14 or older): chromadb
   default: none
   when: "{{ project_type in ['service', 'notebooks'] }}"
 

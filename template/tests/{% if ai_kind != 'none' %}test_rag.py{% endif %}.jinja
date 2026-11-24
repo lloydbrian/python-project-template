@@ -6,6 +6,9 @@ from __future__ import annotations
 import hashlib
 import math
 from pathlib import Path
+{%- if ai_kind == 'lancedb' %}
+from typing import Any
+{%- endif %}
 
 import pytest
 {%- if ai_kind == "lancedb" %}
@@ -14,6 +17,9 @@ from lancedb.embeddings import TextEmbeddingFunction, get_registry, register
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 {%- endif %}
 
+{% if ai_kind == 'lancedb' -%}
+from {{ package_name }} import rag
+{% endif -%}
 from {{ package_name }}.rag import DocumentStore, chunk_text, default_store_path, pdf_text
 
 DIMS = 32
@@ -41,6 +47,30 @@ class HashEmbeddings(TextEmbeddingFunction):
 
 def _store(path: Path) -> DocumentStore:
     return DocumentStore(path, embedder=get_registry().get("test-hash-embeddings").create())
+
+
+class FakeStaticModel:
+    """Stands in for a downloaded model2vec model: same `dim` and `encode` interface."""
+
+    dim = DIMS
+
+    def encode(self, texts: list[str]) -> Any:
+        import numpy as np
+
+        return np.array([_vector(t) for t in texts], dtype=np.float32)
+
+
+def test_model2vec_adapter_embeds_through_lancedb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real embedding function, with the model download replaced by a fake model."""
+    monkeypatch.setattr(rag, "_load_model", lambda name, revision: FakeStaticModel())
+    embedder = rag.default_embedder()
+    assert isinstance(embedder, rag.Model2VecEmbeddings)
+    assert embedder.revision == rag.MODEL_REVISION
+    store = DocumentStore(tmp_path, embedder=embedder)
+    store.add(TEXTS)
+    assert store.search("tennis practice", k=1)[0].text == TEXTS[2]
 {%- else %}
 
 
@@ -165,7 +195,7 @@ def test_pdf_text_extracts_page_text(tmp_path: Path) -> None:
 
 @pytest.mark.live
 def test_real_embedding_model_ranks_meaning(tmp_path: Path) -> None:
-    """Downloads all-MiniLM-L6-v2 (about 80 MB) on first run: `uv run pytest -m live`."""
+    """Downloads the embedding model on first run: `uv run pytest -m live`."""
     store = DocumentStore(tmp_path)
     store.add(["The cat sat on the mat", "Quarterly revenue grew 12 percent"])
     assert "revenue" in store.search("company earnings", k=1)[0].text

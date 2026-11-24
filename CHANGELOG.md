@@ -33,7 +33,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Dependency floors raised to the latest releases. The v1 floors allowed 7 packages with 34 published advisories (jupyterlab, starlette via fastapi, setuptools, nbconvert, jupyterlab-git, pytest, python-dotenv). Major upgrades: mypy 2, pytest 9, pytest-asyncio 1, pandas 3, rich 15, ipykernel 7, setuptools 84.
 - Services add `httpx2` to the dev group: Starlette 1.10 deprecates `httpx` as the TestClient backend.
 - mise 2026.11.14 in CI; `packaging` pinned to 26.4 in the release tag check.
-- Optional AI stack (`ai_stack`: `lancedb` or `chromadb`) for services and notebooks: vector store, local all-MiniLM-L6-v2 embeddings baked into images, pdfplumber, Tavily; `python_version` follows it (ChromaDB ≤3.14). ChromaDB's server-only advisories ship as time-boxed `.pip-audit-ignore` entries dated at bootstrap (ADR 0012). Matrix: 8 variants; 22 negative controls.
+- Optional AI stack (`ai_stack`: `lancedb` or `chromadb`) for services and notebooks: vector store, local embeddings baked into images (LanceDB: model2vec potion-retrieval-32M pinned to a commit, no PyTorch; ChromaDB: its built-in all-MiniLM-L6-v2), pdfplumber, Tavily; `python_version` follows it (ChromaDB ≤3.14). ChromaDB's server-only advisories ship as time-boxed `.pip-audit-ignore` entries dated at bootstrap (ADR 0012). Matrix: 8 variants; 22 negative controls.
 
 ### Removed
 - `template-python-projects/` and `template-jupyterlab-projects/` (replaced by `template/`).

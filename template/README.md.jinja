@@ -354,13 +354,13 @@ podman compose -f .container/compose.yaml up     # or in a container on 127.0.0.
 
 ## AI stack
 
-This project was generated with **{{ 'LanceDB + sentence-transformers' if ai_kind == 'lancedb' else 'ChromaDB with its built-in embedder' }}**, plus pdfplumber for PDFs and Tavily for web search. The code is in `src/{{ package_name }}/rag.py` and `web_search.py`; the tests run offline.
+This project was generated with **{{ 'LanceDB + model2vec embeddings' if ai_kind == 'lancedb' else 'ChromaDB with its built-in embedder' }}**, plus pdfplumber for PDFs and Tavily for web search. The code is in `src/{{ package_name }}/rag.py` and `web_search.py`; the tests run offline.
 
 | Piece | Where | Why this one |
 |---|---|---|
 {%- if ai_kind == 'lancedb' %}
 | **Vector store: LanceDB** | `rag.DocumentStore` | Embedded: files under `data/vectors`, no server to run or secure. Its index lives on disk, so it handles data larger than memory, and it installs from wheels on every offered Python, including 3.15 (template ADR 0012) |
-| **Embeddings: sentence-transformers** | `rag.default_embedder()` | Runs all-MiniLM-L6-v2 locally on the CPU through LanceDB's embedding registry: no API key, no per-call cost, and text never leaves the machine |
+| **Embeddings: model2vec** | `rag.Model2VecEmbeddings` | Static embeddings from `minishlab/potion-retrieval-32M` (MIT), pinned to one commit: no PyTorch (whose Linux wheels pull about 4 GB of CUDA libraries), very fast on the CPU, no API key or per-call cost, and text never leaves the machine. The trade-off is retrieval quality: the model card scores 35.06 on MTEB retrieval against 42.92 for all-MiniLM-L6-v2 |
 {%- else %}
 | **Vector store: ChromaDB** | `rag.DocumentStore` | The simplest API: you add and query plain strings, and its built-in embedder does the rest. Embedded `PersistentClient` only, with files under `data/vectors` and no server (template ADR 0012) |
 | **Embeddings: Chroma's built-in model** | Chroma's `DefaultEmbeddingFunction` | all-MiniLM-L6-v2 through onnxruntime on the CPU: no API key, no per-call cost, and text never leaves the machine |
@@ -380,13 +380,13 @@ for hit in store.search("What changed in Q3?", k=3):
     print(f"{hit.distance:.3f}  {hit.text[:80]}")
 ```
 
-**The embedding model** (all-MiniLM-L6-v2, 384 dimensions, English-focused):
+**The embedding model** ({% if ai_kind == 'lancedb' %}potion-retrieval-32M, English-focused{% else %}all-MiniLM-L6-v2, 384 dimensions, English-focused; text past 256 tokens is cut off{% endif %}):
 
-- The first use downloads it (about 80 MB) {% if ai_kind == 'lancedb' %}from Hugging Face into `~/.cache/huggingface`{% else %}from Chroma's model bucket into `~/.cache/chroma/onnx_models` (checked against a SHA-256){% endif %}. After that it works offline.
+- The first use downloads it {% if ai_kind == 'lancedb' %}from Hugging Face at the pinned commit `MODEL_REVISION` into `~/.cache/huggingface`{% else %}(about 80 MB) from Chroma's model bucket into `~/.cache/chroma/onnx_models`, checked against a SHA-256{% endif %}. After that it works offline.
 - Container images **bake the model in** at build time, as the `app` user{% if ai_kind == 'lancedb' %}, and set `HF_HUB_OFFLINE=1`{% endif %}. Only the image build needs network access. `mise run image` then proves it: it embeds and searches inside the new image with `--network=none` on a read-only filesystem, and fails if the model is missing.
 {%- if ai_kind == 'lancedb' %}
-- sentence-transformers depends on PyTorch, so installs and images are large: the torch wheel alone is about 140 MB on macOS and 540 MB on Linux.
-- To change model or provider, edit `default_embedder()`. LanceDB's registry also has `openai`, `voyageai`, `ollama` and `huggingface` embedders. Every store keeps the model it was created with, so re-index after changing it.
+- Without PyTorch the runtime environment is about 550 MB (LanceDB and pyarrow are most of it), plus the model.
+- **Better quality when you need it:** edit `default_embedder()`. LanceDB's registry has `voyageai` and `openai` (API key, per-token cost, text leaves the machine) and `ollama` (your own local server). `sentence-transformers` gives all-MiniLM-L6-v2 but brings PyTorch: on Linux, point torch at PyTorch's CPU-only package index first, or images grow to about 5 GB. Every store keeps the model it was created with, so re-index after changing it.
 {%- else %}
 - Chroma's anonymous usage telemetry is switched off in `DocumentStore` (and `ANONYMIZED_TELEMETRY=False` in images).
 {%- endif %}
@@ -399,7 +399,7 @@ for hit in store.search("What changed in Q3?", k=3):
 
 **Why Python {{ python_version }} and not 3.15:** ChromaDB always installs onnxruntime to run its built-in model, and onnxruntime has no Python 3.15 wheels yet (it publishes no source package to build from). The template therefore refuses ChromaDB with 3.15. Two ways forward:
 
-1. **Switch to LanceDB.** Replace `DocumentStore` in `rag.py` (the template's LanceDB version has the same `add`/`search` interface), swap `chromadb` for `lancedb` and `sentence-transformers` in `pyproject.toml`, then re-index. The model is the same, so search results stay comparable.
+1. **Switch to LanceDB.** Replace `DocumentStore` in `rag.py` (the template's LanceDB version has the same `add`/`search` interface), swap `chromadb` for `lancedb`, `model2vec` and `huggingface-hub` in `pyproject.toml`, then re-index. The embedding model changes too (see the template's LanceDB version), so check search quality on your own data.
 2. **Wait for onnxruntime.** Once a template release lifts the restriction, run `copier update --data python_version=3.15`.
 
 **Audit exceptions (`.pip-audit-ignore`):** ChromaDB has four published advisories with no fixed release. All of them affect the **ChromaDB server**: code injection through model repositories, and tenant authorization. This project uses only the embedded client, so they are recorded as time-boxed exceptions instead of failing every audit:

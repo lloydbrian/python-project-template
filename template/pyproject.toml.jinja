@@ -43,9 +43,11 @@ dependencies = [
   "typer>=0.29",
 {%- endif %}
 {%- if ai_kind == "lancedb" %}
-  # AI retrieval stack (README "AI stack"): embedded vector store + local embeddings
+  # AI retrieval stack (README "AI stack"): embedded vector store + local static embeddings.
+  # model2vec, not sentence-transformers: no PyTorch, whose Linux wheels pull ~4 GB of CUDA.
   "lancedb>=0.41",
-  "sentence-transformers>=6.3",
+  "model2vec>=0.10",
+  "huggingface-hub>=2.4",              # downloads the model at a pinned revision
 {%- elif ai_kind == "chromadb" %}
   # AI retrieval stack (README "AI stack"): embedded vector store with its built-in embedder.
   # Pinned to Python <=3.14 by copier.yml: its onnxruntime dependency has no 3.15 wheels yet.

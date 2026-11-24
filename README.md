@@ -105,7 +105,7 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | `package_name` | always | slug with `_`, e.g. `ticket_triage` | Python import package under `src/` |
 | `description` | always | the project name | `pyproject.toml` and README |
 | `author_name` | always | `Lloyd D.` | `pyproject.toml` authors |
-| `ai_stack` | service, notebooks | `none` | `lancedb` (LanceDB + sentence-transformers, any Python) or `chromadb` (ChromaDB + built-in embedder, Python 3.14 or older), each with pdfplumber and Tavily. Asked before `python_version` because it limits it ([ADR 0012](docs/adr/0012-ai-stack.md)) |
+| `ai_stack` | service, notebooks | `none` | `lancedb` (LanceDB + model2vec embeddings, any Python, no PyTorch) or `chromadb` (ChromaDB + built-in embedder, Python 3.14 or older), each with pdfplumber and Tavily. Asked before `python_version` because it limits it ([ADR 0012](docs/adr/0012-ai-stack.md)) |
 | `python_version` | always | `3.15` (`3.14` with ChromaDB) | One value for mise, `requires-python`, the base image, ruff `target-version` and mypy `python_version`. Choices `3.15`, `3.14`, `3.13`. With `ai_stack=chromadb`, 3.15 is shown disabled with the reason: onnxruntime, which ChromaDB always installs, has no 3.15 wheels yet |
 | `github_owner` | always | `lloydbrian` | Where the project's CI finds the shared workflow |
 | `coverage_threshold` | always | `80` | `fail_under` for pytest-cov |

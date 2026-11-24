@@ -4,9 +4,16 @@ Why a wrapper: the rest of the code depends on `DocumentStore.add()` and `.searc
 {% if ai_kind == "lancedb" %}LanceDB{% else %}ChromaDB{% endif %}'s own API, so changing the vector store (for example ChromaDB -> LanceDB to move to
 Python 3.15) touches this one file.
 
-Embeddings run locally with all-MiniLM-L6-v2: 384 dimensions, English-focused, and input longer
-than 256 tokens is cut off, so split long documents with `chunk_text()` before adding them. The
-model (about 80 MB) is downloaded on first use and cached; container images bake it in.
+{%- if ai_kind == "lancedb" %}
+Embeddings run locally with model2vec's potion-retrieval-32M: static embeddings, so no PyTorch and
+very fast on CPU, at somewhat lower retrieval quality than transformer models. English-focused.
+The model is downloaded once at a pinned revision and cached; container images bake it in.
+{%- else %}
+Embeddings run locally with Chroma's built-in all-MiniLM-L6-v2 (ONNX): 384 dimensions,
+English-focused, and input longer than 256 tokens is cut off. The model (about 80 MB) is
+downloaded on first use and cached; container images bake it in.
+{%- endif %}
+Split long documents with `chunk_text()` before adding them: smaller chunks retrieve better.
 """
 
 from __future__ import annotations
@@ -16,6 +23,9 @@ import os
 {% endif -%}
 from collections.abc import Sequence
 from dataclasses import dataclass
+{%- if ai_kind == 'lancedb' %}
+from functools import lru_cache
+{%- endif %}
 from pathlib import Path
 from typing import Any{% if ai_kind == 'lancedb' %}, cast{% endif %}
 from uuid import uuid4
@@ -23,8 +33,10 @@ from uuid import uuid4
 {%- if ai_kind == "lancedb" %}
 
 import lancedb
-from lancedb.embeddings import EmbeddingFunction, get_registry
+from huggingface_hub import snapshot_download
+from lancedb.embeddings import EmbeddingFunction, TextEmbeddingFunction, register
 from lancedb.pydantic import LanceModel, Vector
+from model2vec import StaticModel
 {%- else %}
 
 import chromadb
@@ -32,7 +44,13 @@ from chromadb.api.types import Documents, EmbeddingFunction
 from chromadb.config import Settings
 {%- endif %}
 
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
+{% if ai_kind == "lancedb" -%}
+DEFAULT_MODEL = "minishlab/potion-retrieval-32M"  # MIT licence, tuned for retrieval
+# Pinned commit: the build downloads exactly this model, never whatever `main` has become.
+MODEL_REVISION = "6fc8051fab2a1e0ee76689cf08c853792ac285e7"
+{%- else -%}
+DEFAULT_MODEL = "all-MiniLM-L6-v2"  # Chroma's built-in embedder (SHA-256 checked by Chroma)
+{%- endif %}
 
 
 def default_store_path() -> str:
@@ -58,15 +76,43 @@ class Hit:
 {%- if ai_kind == "lancedb" %}
 
 
-# LanceDB's embedding helpers (create, SourceField, VectorField) are untyped, hence the targeted
-# `type: ignore[no-untyped-call]` comments below; everything else is fully type-checked.
+# LanceDB's embedding helpers (register, create, SourceField, VectorField) are untyped, hence
+# the targeted `type: ignore[no-untyped-call]` comments below; everything else is type-checked.
+
+
+@lru_cache(maxsize=4)
+def _load_model(name: str, revision: str) -> StaticModel:  # pragma: no cover - downloads
+    """Download (once, then from cache) the model files at `revision` and load them."""
+    return StaticModel.from_pretrained(snapshot_download(name, revision=revision))
+
+
+@register("model2vec")  # type: ignore[no-untyped-call]
+class Model2VecEmbeddings(TextEmbeddingFunction):
+    """LanceDB embedding function for model2vec static models (registered as "model2vec").
+
+    The registry name and fields are saved in each table's schema, so a store reopens with the
+    same model and revision it was created with.
+    """
+
+    name: str = DEFAULT_MODEL
+    revision: str = MODEL_REVISION
+
+    def ndims(self) -> int:
+        return int(self._model().dim)
+
+    def generate_embeddings(self, texts: Sequence[str]) -> list[list[float]]:  # type: ignore[override]
+        return cast(list[list[float]], self._model().encode(list(texts)).tolist())
+
+    def _model(self) -> StaticModel:
+        return _load_model(self.name, self.revision)
 
 
 def default_embedder() -> EmbeddingFunction:
-    """all-MiniLM-L6-v2 through sentence-transformers, on CPU, with normalised vectors."""
-    factory = get_registry().get("sentence-transformers")
-    embedder = factory.create(name=DEFAULT_MODEL, device="cpu")  # type: ignore[no-untyped-call]
-    return cast(EmbeddingFunction, embedder)
+    """potion-retrieval-32M through model2vec, at the pinned revision.
+
+    LanceDB requires `.create()`: it records the function's settings in the table schema.
+    """
+    return cast(EmbeddingFunction, Model2VecEmbeddings.create())  # type: ignore[no-untyped-call]
 
 
 class DocumentStore:
@@ -105,7 +151,7 @@ class DocumentStore:
 
 def warm_up() -> None:  # pragma: no cover - downloads the model; run by the image build
     """Download and load the embedding model once (used when building the container image)."""
-    default_embedder().compute_source_embeddings(["warm-up"])
+    _load_model(DEFAULT_MODEL, MODEL_REVISION).encode(["warm-up"])
 {%- else %}
 
 
