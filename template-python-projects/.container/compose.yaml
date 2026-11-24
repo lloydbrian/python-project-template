@@ -1,0 +1,13 @@
+# .container/compose.yaml — a dev shell with your code mounted:
+#   podman compose -f .container/compose.yaml up -d && podman compose -f .container/compose.yaml exec app bash
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .container/Containerfile
+      target: dev
+    command: sleep infinity
+    volumes: ["..:/app:Z"]            # :Z relabels for SELinux hosts; harmless elsewhere
+    env_file: [../.env.dev]           # local values only; never commit this file
+    environment:
+      APP_ENV: dev
