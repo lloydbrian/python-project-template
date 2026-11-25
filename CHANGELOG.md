@@ -14,12 +14,13 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Shared workflows `python-ci.yml` and `python-release.yml` called by generated projects at a pinned release (ADR 0009).
 - Releases without a registry: multi-arch OCI archives, CycloneDX SBOMs, build provenance, `SHA256SUMS` (ADR 0011).
 - Time-boxed `.trivyignore` exceptions validated by `tools/check_scan_exceptions.py` (ADR 0006).
-- Template CI: render matrix (8 variants: service, library, library-container, notebooks, the two AI stacks, and the service on 3.14 and 3.13) with an image build-context simulation (`scripts/image_sim.py`), 23 negative controls, `copier update` test, pin policy, actionlint.
+- Template CI: render matrix (8 variants: service, library, library-container, notebooks, the two AI stacks, and the service on 3.14 and 3.13) with an image build-context simulation (`scripts/image_sim.py`), 24 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
 - ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
 - `mise run ci` includes pip-audit, bandit and a full-history gitleaks scan, so it equals what CI runs.
 - Copier validators reject names, descriptions and kernel names that would break TOML, Python or shell; the slug drops other characters.
+- Service settings treat blank env values (`APP_TITLE=`, common in v1 `.env.dev` files) as unset, so defaults apply; `app_title` and `app_version` reject empty strings (found adopting v2 in `template-repo` at rc.1; fixed in rc.2).
 
 ### Changed
 - Workstation set-up consolidated into `workstation/README.md`; terminal config moved to `workstation/terminal/`. Dropped the `openssl readline zlib sqlite` build dependencies (mise installs prebuilt Python).
@@ -34,7 +35,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Services add `httpx2` to the dev group: Starlette 1.10 deprecates `httpx` as the TestClient backend.
 - Doc commands are paste-safe in zsh and bash: text with `!` is single-quoted, and `scripts/check_shell_snippets.py` (in `mise run lint`) rejects regressions.
 - mise 2026.11.14 in CI; `packaging` pinned to 26.4 in the release tag check.
-- Optional AI stack (`ai_stack`: `lancedb` or `chromadb`) for services and notebooks: vector store, local embeddings baked into images (LanceDB: model2vec potion-retrieval-32M pinned to a commit, no PyTorch; ChromaDB: its built-in all-MiniLM-L6-v2), pdfplumber, Tavily; `python_version` follows it (ChromaDB ≤3.14). ChromaDB's server-only advisories ship as time-boxed `.pip-audit-ignore` entries dated at bootstrap (ADR 0012). Matrix: 8 variants; 23 negative controls.
+- Optional AI stack (`ai_stack`: `lancedb` or `chromadb`) for services and notebooks: vector store, local embeddings baked into images (LanceDB: model2vec potion-retrieval-32M pinned to a commit, no PyTorch; ChromaDB: its built-in all-MiniLM-L6-v2), pdfplumber, Tavily; `python_version` follows it (ChromaDB ≤3.14). ChromaDB's server-only advisories ship as time-boxed `.pip-audit-ignore` entries dated at bootstrap (ADR 0012). Matrix: 8 variants; 24 negative controls.
 
 ### Removed
 - `template-python-projects/` and `template-jupyterlab-projects/` (replaced by `template/`).

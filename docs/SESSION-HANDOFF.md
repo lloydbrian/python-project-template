@@ -1,6 +1,6 @@
 # Session handoff: python-project-template v2.0.0
 
-**State:** built, tested and independently reviewed in the build sandbox. Nothing has been pushed, tagged or renamed. The operator runs `docs/RUNBOOK-v2.0.0.md`.
+**State (2026-11-24):** the operator ran runbook steps 0–7. PR #2 is merged as `9baafb4`, the repo is renamed `python-project-template`, `main` is protected (11 required checks bound to GitHub Actions), the `release-tags` ruleset protects `v*` with no bypass, and `v2.0.0-rc.1` is released (pre-release). Step 8 found a template bug when `template-repo` kept its v1 `.env.dev`: `APP_TITLE=` (blank) reached FastAPI as an empty title and the service crashed at import. Fixed for `v2.0.0-rc.2` (runbook step 7b); steps 8–10 continue from rc.2.
 
 ## What changed
 - `template-repo-files` was converted in place into a Copier template (renamed `python-project-template` in runbook step 6):
@@ -19,12 +19,13 @@
 - Dependency floors at the latest releases, never below a security fix (2026-11-24).
 - Optional AI stack (2026-11-24): LanceDB + model2vec (any Python, no PyTorch; replaced sentence-transformers after review found ~5 GB CUDA images) or ChromaDB (Python ≤3.14, onnxruntime has no 3.15 wheels), each with pdfplumber and Tavily; ChromaDB's server-only advisories handled as time-boxed exceptions (ADR 0012).
 - READMEs stay detailed: every tool and step carries its "why".
+- Tag ruleset with no bypass list (2026-11-24): with one admin, an admin bypass protects nothing. `main` keeps the admin bypass for recovery; releases still run full template CI.
 
 ## Verification
 | Check | Result |
 |---|---|
 | Render + gates, 8 variants including both AI stacks (lint, format, mypy strict, pytest + coverage, pip-audit, bandit, full-history gitleaks, image-stage simulation) on 3.15, 3.14, 3.13 | 8/8 PASS |
-| Negative controls | 23/23 caught |
+| Negative controls | 24/24 caught |
 | `copier update` test (template change arrives, local edit kept, computed ref moves, no conflicts) | PASS |
 | actionlint, root pre-commit, gitleaks, pin policy (actions + hooks by SHA, versions agree) | PASS |
 | Independent review: correctness, security, operability, docs accuracy | 2 critical (one reported by two reviewers, one found while fixing), 14 major, about 35 minor (unique): all fixed |
@@ -36,10 +37,11 @@
 - `python-release.yml` on real runners (arm64, attestations, assets): runbook step 8 does a test release of the reference app.
 
 ## Judgment calls (operator)
-1. **Shared workflows are called by tag** (`@v2.0.0`), because Copier renders the tag, not its SHA. Mitigation: a tag ruleset blocking updates and deletion (runbook step 6). Fix a bad tag by publishing the next one.
+1. **Shared workflows are called by tag** (`@v2.0.0`), because Copier renders the tag, not its SHA. Mitigation: a tag ruleset blocking updates and deletion, with no bypass (runbook step 6c). Fix a bad tag by publishing the next one.
 2. **Provenance only on public repos.** Private repos skip attestation (GitHub requires Enterprise Cloud there). Releases still get SBOMs and `SHA256SUMS`.
 3. **Residual risk in the notebooks lab:** kernels can edit tracked files. `.git` is read-only; review `git status` after a session (documented).
 4. **Old commit metadata:** earlier commits in the repository history carry a personal author email. It predates this work and was not copied anywhere. Rewriting history is destructive, so it is your decision; it only matters if the repo is made public.
+5. **Fix forward to rc.2** for the blank-env-values bug (recommended), rather than folding the fix into the final release: the rc is then what ships, exercised by the reference app, and the final release changes only `template_ref`.
 
 ## Files for the operator
 - `template-repo-files-v2.bundle`: branch `feat/v2-copier-template`.
