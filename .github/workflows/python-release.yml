@@ -104,14 +104,21 @@ jobs:
           mkdir -p dist
           podman save --format oci-archive -o "dist/$NAME-$VERSION-linux-$ARCH.oci.tar" "localhost/$NAME:$VERSION"
 
+      # trivy reads an OCI layout directory or a docker archive with --input, not an OCI archive
+      # file, so the shipped archive is unpacked once and both steps read exactly what ships.
+      - name: Unpack the archive for scanning
+        run: |
+          mkdir -p "$RUNNER_TEMP/oci-$ARCH"
+          tar -xf "dist/$NAME-$VERSION-linux-$ARCH.oci.tar" -C "$RUNNER_TEMP/oci-$ARCH"
+
       - name: Scan
         run: |
           uv run python tools/check_scan_exceptions.py .trivyignore
-          trivy image --input "dist/$NAME-$VERSION-linux-$ARCH.oci.tar" --severity HIGH,CRITICAL \
+          trivy image --input "$RUNNER_TEMP/oci-$ARCH" --severity HIGH,CRITICAL \
             --ignore-unfixed --ignorefile .trivyignore --exit-code 1
 
       - name: SBOM
-        run: trivy image --input "dist/$NAME-$VERSION-linux-$ARCH.oci.tar" --format cyclonedx --output "dist/$NAME-$VERSION-linux-$ARCH.sbom.cdx.json"
+        run: trivy image --input "$RUNNER_TEMP/oci-$ARCH" --format cyclonedx --output "dist/$NAME-$VERSION-linux-$ARCH.sbom.cdx.json"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

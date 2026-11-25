@@ -4,7 +4,7 @@ The **operator** (LBD) runs every step on the Mac. Claude built, tested and revi
 
 Each step has a **pre-flight** (check before), the **command**, **Expect** (what success looks like), a **Stop if**, and a **post-flight** where useful. Commands that change anything outside your working tree are marked **[changes remote]**, with how to undo them.
 
-**Status (2026-11-24):** steps 0–7 ran for `v2.0.0-rc.1`. Step 8 found a template bug (blank values in a v1 `.env.dev` crashed the service), so step 7b cuts `v2.0.0-rc.2` and steps 8–10 continue from it. Run verification and commit blocks separately: a block that commits must only be run after the block before it printed its pass line.
+**Status (2026-11-24):** steps 0–7 ran for `v2.0.0-rc.1`. Step 8 found a template bug (blank values in a v1 `.env.dev` crashed the service), so step 7b cut `v2.0.0-rc.2`. Step 8.5's test release then found that trivy cannot read the release's OCI archive file, so `v2.0.0-rc.3` fixes the release scan (same 7b path) and steps 8–10 continue from rc.3. From rc.2 on, every operator block is a guarded function (state checks first, `STOP: <reason>` with no changes, `&&` between changes), reviewed and tested in zsh and bash before it is shared. Run verification and commit blocks separately: a block that commits must only be run after the block before it printed its pass line.
 
 **Every step starts the same way.** The first line loads `~/.runbook-v2.env` (written in step 0) and moves into the right folder, then prints it. Steps therefore work in any new terminal, and after step 6 renames the folder they land in `python-project-template` automatically.
 
@@ -358,16 +358,16 @@ rc.1 passed its own release, but step 8 found that a v1 `.env.dev` with blank va
 ```bash
 source "$HOME/.runbook-v2.env" && cd "$DL" && pwd && shasum -a 256 -c SHA256SUMS-0002
 source "$HOME/.runbook-v2.env" && cd "$TPL" && pwd
-git switch main && git pull --ff-only && git switch -c fix/v2.0.0-rc.2
-git am "$DL/0002-fix-blank-env-values-rc.2.patch"
-sed -i '' 's/^  default: v2.0.0-rc.1$/  default: v2.0.0-rc.2/' copier.yml
+git switch main && git pull --ff-only && git switch -c fix/v2.0.0-rc.2 && git am "$DL/0002-fix-blank-env-values-rc.2.patch" && sed -i '' 's/^  default: v2.0.0-rc.1$/  default: v2.0.0-rc.2/' copier.yml && echo "APPLY: OK"
 grep -n -A3 '^template_ref:' copier.yml
 python3 scripts/check_pins.py --release --tag v2.0.0-rc.2
 mise run lint
 mise run negative-controls -- --only settings-blank-values settings-validation
 ```
 
-**Expect:** the checksum `OK`, one commit applied, `default: v2.0.0-rc.2`, `check_pins: OK (release)`, lint passes, `negative controls: 2/2 caught`. **Stop if** any fail; nothing has left the Mac yet. **Undo:** `git switch main && git branch -D fix/v2.0.0-rc.2`.
+Every state-changing line is chained with `&&`, so a failure (for example a branch that already exists from an earlier attempt) stops before `git am` can apply the patch to the wrong branch.
+
+**Expect:** the checksum `OK`, `APPLY: OK`, `default: v2.0.0-rc.2`, `check_pins: OK (release)`, lint passes, `negative controls: 2/2 caught`. **Stop if** any fail; nothing has left the Mac yet. **Undo:** `git switch main && git branch -D fix/v2.0.0-rc.2`.
 
 Commit, push and open the PR (separate block: run it only after the one above passes):
 
