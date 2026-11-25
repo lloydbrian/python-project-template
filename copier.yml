@@ -154,7 +154,7 @@ kernel_display_name:
 # ---------------------------------------------------------------------------
 template_ref:
   type: str
-  default: v2.0.0-rc.2
+  default: v2.0.0-rc.3
   when: false
 
 has_container:
