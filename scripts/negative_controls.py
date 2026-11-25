@@ -106,6 +106,13 @@ CONTROLS = [
         marker="test_rejects_unknown_log_level",
     ),
     Control(
+        "settings-blank-values",
+        "a blank APP_TITLE= in an old env file falls back to the default",
+        'uv run pytest -q --no-cov -m "not live" tests/test_config.py',
+        lambda p: edit(p / f"src/{PKG}/config.py", ", env_ignore_empty=True)", ")"),
+        marker="test_blank_values_use_defaults",
+    ),
+    Control(
         "request-id-sanitising",
         "unsafe X-Request-ID values are replaced",
         'uv run pytest -q --no-cov -m "not live" tests/test_health.py',

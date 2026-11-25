@@ -15,6 +15,7 @@ The `service` variant starts with:
 - Request-ID middleware: reuse a caller's `X-Request-ID` only if it matches `^[A-Za-z0-9._-]{1,64}$` (log-injection safe), else generate one; echo it on every response; log access lines inside the request context.
 - JSON logging with the request ID (`LOG_JSON=false` for local readability).
 - `pydantic-settings` with `Literal` and range-checked fields that fail at start-up; real environment variables win over `.env.<APP_ENV>`; secrets declared as `SecretStr`.
+- Blank values (`APP_TITLE=`) count as unset (`env_ignore_empty`), so the default applies; text fields that must not be empty also have `min_length=1`. Env files copied from older projects often list names with blank values, and before this an empty title crashed FastAPI at import instead of failing with a clear settings error.
 
 - API docs (`/docs`, `/redoc`, `/openapi.json`) only outside `prod`.
 
