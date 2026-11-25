@@ -10,6 +10,7 @@ It is a [Copier](https://copier.readthedocs.io/) template. You answer a few ques
 [Why it exists](#why-this-template-exists) ·
 [Quick start](#quick-start) ·
 [Choose a project type](#choose-a-project-type) ·
+[Starting an AI project](#starting-an-ai-project) ·
 [Questions](#the-questions-copier-asks) ·
 [What you get](#what-every-project-gets) ·
 [Toolchain and why](#toolchain-and-why-each-tool-was-chosen) ·
@@ -90,6 +91,35 @@ copier copy --vcs-ref v2.0.0 --defaults \
 | **AI stack (optional)** | LanceDB or ChromaDB, local embeddings, pdfplumber, Tavily | — | Same choice |
 
 All three share the same toolchain, the same gates and the same upgrade path.
+
+### Starting an AI project
+
+AI is not a fourth project type. Choose **service** for an AI API (retrieval-augmented generation or search) or **notebooks** for AI exploration, then answer `ai_stack`. Copier asks it only for those two types, and asks it before `python_version`. **Why:** the AI stack decides which Python versions can install, so it is answered first.
+
+| `ai_stack` | Pick it when | Trade-off |
+|---|---|---|
+| `lancedb` (recommended) | You want retrieval and have no specific need for ChromaDB | LanceDB + model2vec embeddings: any offered Python including 3.15, small images, no PyTorch. Its model scores lower on retrieval benchmarks than all-MiniLM-L6-v2 |
+| `chromadb` | You specifically need ChromaDB | ChromaDB with its built-in all-MiniLM-L6-v2: Python 3.14 or older. onnxruntime has no 3.15 wheels, so 3.15 is shown disabled and the `python_version` default becomes 3.14 |
+| `none` (the default) | The project needs no retrieval | Nothing is added |
+
+Either stack adds:
+
+- a vector store behind one `rag.DocumentStore` interface (`add`, `search`, `count`). **Why:** changing stores later touches one file;
+- local embeddings, with the model baked into the image at build time. **Why:** containers never download it, so they work offline;
+- `pdfplumber` for PDF text, and Tavily web search (`web_search.py`). The key `TAVILY_API_KEY` goes in `.env.dev` locally (git-ignored) or a Podman secret in containers, never in a committed file;
+- with ChromaDB only: time-boxed `.pip-audit-ignore` entries for its server-only advisories, dated by `mise run bootstrap` to expire after 90 days. **Why:** the audit gate stays on and fails again when they expire.
+
+The decision, the alternatives and the trade-offs are in [ADR 0012](docs/adr/0012-ai-stack.md).
+
+**Non-interactive** (the same project type and stack as the `service-ai-lancedb` variant template CI tests):
+
+```bash
+copier copy --vcs-ref v2.0.0 --defaults \
+  --data project_type=service --data ai_stack=lancedb --data project_name="Ticket Triage" \
+  gh:lloydbrian/python-project-template ticket-triage
+```
+
+Then follow the [Quick start](#quick-start) from `cd`: `git init`, bootstrap, `.env.dev`, the first commit and `mise run ci`.
 
 ---
 
@@ -283,9 +313,13 @@ Decided 2026-11-23 ([ADR 0011](docs/adr/0011-release-artifacts-without-registry.
 ```bash
 gh release download v0.1.0 -R owner/project
 sha256sum -c SHA256SUMS
-gh attestation verify ticket-triage-0.1.0-linux-arm64.oci.tar -R owner/project
+gh attestation verify ticket-triage-0.1.0-linux-arm64.oci.tar -R owner/project \
+  --signer-workflow lloydbrian/python-project-template/.github/workflows/python-release.yml \
+  --source-ref refs/tags/v0.1.0
 podman load -i ticket-triage-0.1.0-linux-arm64.oci.tar
 ```
+
+**Why `--signer-workflow`:** the provenance is signed by this template's shared `python-release.yml`, not by a workflow in the project's repo, so `gh` must be told which workflow to trust. `--source-ref` also pins the signature to the release tag. Without them, the check fails on every project release.
 
 Release a project by setting `version` in `pyproject.toml`, then tagging `v<version>`. The workflow refuses a tag whose normalised PEP 440 form differs (`v0.2.0-rc.1` matches `0.2.0rc1` and is published as a pre-release; `v0.2` does not match `0.2.0`).
 
