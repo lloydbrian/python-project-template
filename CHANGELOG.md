@@ -20,6 +20,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Optional container for libraries (`include_container`).
 - `mise run ci` includes pip-audit, bandit and a full-history gitleaks scan, so it equals what CI runs.
 - Copier validators reject names, descriptions and kernel names that would break TOML, Python or shell; the slug drops other characters.
+- Release scan and SBOM read the shipped OCI archive unpacked to an OCI layout, because trivy cannot read an OCI archive file with `--input`; local `mise run scan`/`sbom` use the same method so template CI covers it (found by the reference app's test release at rc.2; fixed in rc.3).
 - Service settings treat blank env values (`APP_TITLE=`, common in v1 `.env.dev` files) as unset, so defaults apply; `app_title` and `app_version` reject empty strings (found adopting v2 in `template-repo` at rc.1; fixed in rc.2).
 
 ### Changed
