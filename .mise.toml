@@ -20,7 +20,7 @@ uvx pre-commit run --all-files
 actionlint
 python3 scripts/check_pins.py
 python3 scripts/check_shell_snippets.py
-ignored="$(git status --ignored --porcelain template/ | grep '^!!' || true)"
+ignored="$(git status --ignored --porcelain template/ | grep '^!!' | grep -v '/[.]DS_Store$' || true)"   # Finder metadata is not template content
 [ -z "$ignored" ] || { echo "files under template/ are git-ignored and would never ship:"; echo "$ignored"; exit 1; }
 """
 
