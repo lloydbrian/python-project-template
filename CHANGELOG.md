@@ -4,7 +4,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-11-24
+## [2.0.0] - 2026-11-25
 
 **Breaking:** the repository becomes a Copier template (`python-project-template`). The v1 copy-paste folders are removed. Existing v1 projects can adopt v2 by running `copier copy` into a branch and merging (see the v1 → v2 table in README.md).
 
@@ -16,6 +16,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Time-boxed `.trivyignore` exceptions validated by `tools/check_scan_exceptions.py` (ADR 0006).
 - Template CI: render matrix (8 variants: service, library, library-container, notebooks, the two AI stacks, and the service on 3.14 and 3.13) with an image build-context simulation (`scripts/image_sim.py`), 24 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
+- README section on starting an AI project: choose `service` or `notebooks`, then `ai_stack`.
 - ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
 - `mise run ci` includes pip-audit, bandit and a full-history gitleaks scan, so it equals what CI runs.
@@ -28,6 +29,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Node.js and Java/Maven mise baselines moved to `polyglot/`, updated to Node 26 LTS and Java 25 LTS, the masked `|| true` removed from the Maven format task, and Corepack (no longer shipped from Node 25) replaced by mise-pinned pnpm/yarn.
 - GitHub Actions and pre-commit hooks pinned by commit SHA; image names fully qualified; Podman only (ADR 0003).
 - Releases: attestation runs in its own job without project code, and is skipped on private repos; rc tags become pre-releases.
+- Release docs: `gh attestation verify` passes `--signer-workflow` (the template's shared `python-release.yml` signs, not the project's own workflow) and `--source-ref` (found by the reference app's test release at rc.3).
 - Scan exceptions limited to 90 days; `trivy.yaml`/VEX files refused.
 - Dev container and notebooks lab map the host user to `app`; `.git` is read-only in the lab; git hooks are installed on the host only.
 - Production services hide `/docs` and `/openapi.json`.

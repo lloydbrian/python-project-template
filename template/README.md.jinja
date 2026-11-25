@@ -493,9 +493,13 @@ To use a release:
 ```bash
 gh release download v0.2.0 -R {{ github_owner }}/{{ project_slug }}
 sha256sum -c SHA256SUMS
-gh attestation verify {{ project_slug }}-0.2.0-linux-arm64.oci.tar -R {{ github_owner }}/{{ project_slug }}   # public repos
+gh attestation verify {{ project_slug }}-0.2.0-linux-arm64.oci.tar -R {{ github_owner }}/{{ project_slug }} \
+  --signer-workflow {{ github_owner }}/python-project-template/.github/workflows/python-release.yml \
+  --source-ref refs/tags/v0.2.0   # public repos
 podman load -i {{ project_slug }}-0.2.0-linux-arm64.oci.tar
 ```
+
+`-R` assumes the GitHub repo is named `{{ project_slug }}`. If it is not, use the real `owner/repo` in both commands. **Why `--signer-workflow`:** the provenance is signed by the template's shared `python-release.yml`, not by a workflow in this repo, so `gh` must be told which workflow to trust; `--source-ref` pins it to the release tag.
 
 **Why no registry:** nothing to authenticate to and no credentials in CI. An archive plus SBOM plus provenance is a complete, verifiable artifact. Adding a registry later is one extra job after the scan.
 {%- endif %}

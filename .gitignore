@@ -309,3 +309,6 @@ Claude outputs/
 
 # --- Template maintenance output ---------------------------------------------
 .render/
+
+# --- Deliverables downloaded from Claude (patches, checksums, handoff notes) ---
+/claude-ai-downloads/
