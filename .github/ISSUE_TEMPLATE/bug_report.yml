@@ -1,0 +1,56 @@
+name: Bug report
+description: A generated project, a gate, the shared CI or the release workflow does not behave as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Do not paste secrets, tokens or `.env` values: replace them with `<hidden>`.
+        For a security vulnerability, use private reporting instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Template version
+      description: "`_commit` in the project's `.copier-answers.yml`, or the tag you generated from."
+      placeholder: v2.0.1
+    validations:
+      required: true
+  - type: dropdown
+    id: variant
+    attributes:
+      label: Project type
+      options: [service, library, library with container, notebooks, not about a generated project]
+    validations:
+      required: true
+  - type: input
+    id: ai-stack
+    attributes:
+      label: ai_stack and python_version
+      placeholder: "none, 3.15"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands, starting from `copier copy` or a clean clone.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The output of the failing command (trimmed to the relevant part).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "macOS 27 arm64, Podman 6.x, mise 2026.11.14"

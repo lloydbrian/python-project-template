@@ -4,6 +4,12 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- License: MIT OR Apache-2.0, at the user's option (`LICENSE-MIT`, `LICENSE-APACHE`). Projects generated from the template are the user's own, with no attribution required; their license is still chosen with the `license` question.
+- `docs/design-choices.md`: why Podman, no registry and tags that never move, what each costs, how Podman compares with Docker, containerd and Kubernetes, and how a generated project could move to Docker or Kubernetes.
+- README opens with the version and license, a recorded quickstart (`docs/demo/quickstart.tape`, re-recordable with VHS), and a "Find your way" table by audience; project metadata and license sections at the end.
+- Issue forms (bug, feature, question; blank issues off, security reports routed to private reporting), a "Your first contribution" section in CONTRIBUTING, and a Sponsor button (`.github/FUNDING.yml`).
+
 ## [2.0.1] - 2026-11-26
 
 ### Fixed

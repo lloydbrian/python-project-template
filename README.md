@@ -1,51 +1,14 @@
 # python-project-template
 
-**One template, three project types, one upgrade path.** This repo generates new Python projects for the team: services, libraries and notebook projects. It keeps them up to date afterwards.
+**One template, three project types, one upgrade path.** This repo generates new Python projects for your team: services, libraries and notebook projects. It keeps them up to date afterwards.
+
+**Version:** 2.0.1 · **License:** MIT OR Apache-2.0 · **Python:** 3.15, 3.14, 3.13 · **Containers:** Podman (rootless)
 
 It is a [Copier](https://copier.readthedocs.io/) template. You answer a few questions and get a working repository: pinned toolchain, quality gates, Podman containers, a dev container and CI. When the template improves, `copier update` brings those improvements into every project generated from it, as a reviewable diff.
 
-> **Containers use Podman, not Docker.** Every command, file and CI step in this template assumes Podman (rootless). Docker is not used anywhere.
+![A real run: copier copy generates a service, then mise run bootstrap and mise run ci pass every gate](https://github.com/user-attachments/assets/fe430160-c149-4a1f-8d66-8c9765db28c7)
 
-**Contents:**
-[Why it exists](#why-this-template-exists) ·
-[Quick start](#quick-start) ·
-[Choose a project type](#choose-a-project-type) ·
-[Starting an AI project](#starting-an-ai-project) ·
-[Questions](#the-questions-copier-asks) ·
-[What you get](#what-every-project-gets) ·
-[Toolchain and why](#toolchain-and-why-each-tool-was-chosen) ·
-[How Copier works](#how-copier-works-here) ·
-[Quality gates](#quality-gates) ·
-[Container security](#container-security-model) ·
-[CI architecture](#ci-architecture) ·
-[Releases](#releases-without-a-registry) ·
-[Upgrading projects](#upgrading-a-project) ·
-[Maintaining](#maintaining-the-template) ·
-[Troubleshooting](#troubleshooting) ·
-[Layout](#repository-layout) ·
-[Decisions](#decisions-adrs) ·
-[v1 → v2](#what-changed-from-v1)
-
----
-
-## Why this template exists
-
-Before this template, every new repo began as a copy of an older one. Each copy drifted. Python versions disagreed between the laptop, the container and the linters. Security checks were written so they could never fail. `.env.dev` files could be committed. Fixes made in one repo never reached the others.
-
-The template removes those failure modes structurally rather than by asking people to remember:
-
-| Problem seen in practice | What the template does about it |
-|---|---|
-| "Works on my machine", fails in CI | `mise run ci` (hooks, types, tests, security audit, full-history secret scan) is exactly what CI runs before image work, so passing locally means passing in CI |
-| Python 3.14 locally, 3.12 in the image, 3.11 in ruff/mypy | One answer (`python_version`) drives mise, `requires-python`, the base image and the ruff/mypy targets |
-| Unpinned installs that change under you | `uv.lock` committed; `uv sync --locked` everywhere; base images pinned by digest; CI actions and pre-commit hooks pinned by commit SHA |
-| Secrets committed or baked into images | `.env*` ignored except `.env.example`; gitleaks on every commit; secrets only at run time via `podman secret` |
-| Security checks that cannot fail (`pip-audit \|\| true`) | Every gate exits non-zero on findings, and negative controls prove each gate can fail |
-| Containers running as root, with full capabilities | Rootless Podman, non-root user, pip removed, read-only filesystem and all capabilities dropped for services |
-| Copy-pasted scaffolds never receive fixes | Copier records the template version; `copier update` replays new releases onto existing projects |
-| CI pipelines duplicated and diverging per repo | Projects call one shared, versioned workflow; pipeline fixes ship as template releases |
-
----
+> **Containers use Podman, not Docker.** Every command, file and CI step in this template assumes Podman (rootless). Docker is not used anywhere. Moving a generated project to Docker or Kubernetes should be possible, because the images are standard OCI images: see [Design choices](docs/design-choices.md#moving-to-docker-or-kubernetes).
 
 ## Quick start
 
@@ -73,6 +36,39 @@ copier copy --vcs-ref v2.0.1 --defaults \
 ```
 
 > `gh:` is Copier shorthand for `https://github.com/`. If the template repo is private, Copier uses your git credentials (`gh auth login` sets these up).
+
+---
+
+## Find your way
+
+| You are | If you want to… | Read |
+|---|---|---|
+| **Learner** | Understand why the template exists and what it trades off | [Why this template exists](#why-this-template-exists) → [Design choices](docs/design-choices.md) |
+| **Developer** | Generate a project and work in it | [Quick start](#quick-start) → [Choose a project type](#choose-a-project-type) (AI: [Starting an AI project](#starting-an-ai-project)) → [Questions](#the-questions-copier-asks) → the generated project's own `README.md` |
+| **Operator** | Release, upgrade or fix a generated project | [Releases](#releases-without-a-registry) → [Upgrading a project](#upgrading-a-project) → [Troubleshooting](#troubleshooting) |
+| **Architect** | Review the design and the decisions behind it | [CI architecture](#ci-architecture) → [Container security](#container-security-model) → [Decisions (ADRs)](#decisions-adrs) |
+| **Contributor** | Change the template | [CONTRIBUTING.md](CONTRIBUTING.md) → [Maintaining the template](#maintaining-the-template) |
+
+Everything else: [What every project gets](#what-every-project-gets) · [Toolchain and why](#toolchain-and-why-each-tool-was-chosen) · [How Copier works](#how-copier-works-here) · [Quality gates](#quality-gates) · [Repository layout](#repository-layout) · [What changed from v1](#what-changed-from-v1) · [Release log](docs/RELEASES.md)
+
+---
+
+## Why this template exists
+
+Before this template, every new repo began as a copy of an older one. Each copy drifted. Python versions disagreed between the laptop, the container and the linters. Security checks were written so they could never fail. `.env.dev` files could be committed. Fixes made in one repo never reached the others.
+
+The template removes those failure modes structurally rather than by asking people to remember:
+
+| Problem seen in practice | What the template does about it |
+|---|---|
+| "Works on my machine", fails in CI | `mise run ci` (hooks, types, tests, security audit, full-history secret scan) is exactly what CI runs before image work, so passing locally means passing in CI |
+| Python 3.14 locally, 3.12 in the image, 3.11 in ruff/mypy | One answer (`python_version`) drives mise, `requires-python`, the base image and the ruff/mypy targets |
+| Unpinned installs that change under you | `uv.lock` committed; `uv sync --locked` everywhere; base images pinned by digest; CI actions and pre-commit hooks pinned by commit SHA |
+| Secrets committed or baked into images | `.env*` ignored except `.env.example`; gitleaks on every commit; secrets only at run time via `podman secret` |
+| Security checks that cannot fail (`pip-audit \|\| true`) | Every gate exits non-zero on findings, and negative controls prove each gate can fail |
+| Containers running as root, with full capabilities | Rootless Podman, non-root user, pip removed, read-only filesystem and all capabilities dropped for services |
+| Copy-pasted scaffolds never receive fixes | Copier records the template version; `copier update` replays new releases onto existing projects |
+| CI pipelines duplicated and diverging per repo | Projects call one shared, versioned workflow; pipeline fixes ship as template releases |
 
 ---
 
@@ -400,6 +396,8 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 │   ├── workflows/python-release.yml   shared release: multi-arch OCI archives, SBOM, provenance
 │   ├── workflows/template-ci.yml      this repo's CI: lint, render matrix, controls, update test, release dry run
 │   ├── workflows/release.yml          releases the template on a version tag
+│   ├── ISSUE_TEMPLATE/                bug, feature and question forms
+│   ├── FUNDING.yml                    the Sponsor button
 │   └── CODEOWNERS
 ├── scripts/
 │   ├── render.py                 render a variant (outside this repo) and run its gates
@@ -414,9 +412,12 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 ├── workstation/                  once-per-machine set-up (README) + terminal prompt config
 ├── polyglot/                     mise baselines for Node.js and Java/Maven repos
 ├── docs/adr/                     decisions behind this template
+├── docs/design-choices.md        Podman, no registry, immutable tags: the why and the cost
+├── docs/demo/quickstart.tape     re-records the README's quickstart GIF (VHS)
 ├── .mise.toml                    maintainer tools and tasks
 ├── .pre-commit-config.yaml  ruff.toml  .delivery-loop.yml
 ├── CHANGELOG.md  CONTRIBUTING.md  SECURITY.md
+├── LICENSE-MIT  LICENSE-APACHE
 └── README.md
 ```
 
@@ -462,3 +463,30 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 The reference application [`template-repo`](https://github.com/lloydbrian/template-repo) is now *generated from* this template, not maintained separately.
 
 **Adopting v2 in a v1 project.** Run `copier copy` into a new branch, then the project's gates, and merge. Your git-ignored `.env.dev` survives the copy, as it should. v2 treats blank values in it (`APP_TITLE=`) as unset, so defaults apply, but compare its names with the new `.env.example` and add what is missing (for example `LOG_JSON`, `HTTP_PORT`). List names without showing values: `sed -E 's/=.*/=<hidden>/' .env.dev`.
+
+---
+
+## Project metadata
+
+| Field | Value |
+|---|---|
+| Template release | v2.0.1 ([release log](docs/RELEASES.md), [changelog](CHANGELOG.md)) |
+| Generator | [Copier](https://copier.readthedocs.io/) 9.4 or newer (CI and the docs use 9.19.1) |
+| Python | 3.15 (default), 3.14, 3.13 |
+| Container engine | Podman, rootless ([ADR 0003](docs/adr/0003-podman-only.md)) |
+| Reference app | [`lloydbrian/template-repo`](https://github.com/lloydbrian/template-repo), generated from this template |
+| Security | [SECURITY.md](SECURITY.md) (private vulnerability reporting) |
+| Support the project | [Buy Me a Coffee](https://buymeacoffee.com/lloydbriantech) |
+
+---
+
+## License
+
+Dual-licensed under either of, at your option:
+
+- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
+- MIT License ([`LICENSE-MIT`](LICENSE-MIT))
+
+**Projects you generate are yours.** The files a project receives from `template/` may be used, changed and licensed however you choose, commercially or not, with no attribution required. Choose your project's own license with the `license` question.
+
+Unless you explicitly state otherwise, any contribution you submit for inclusion in this repository is dual-licensed as above, without any additional terms or conditions.

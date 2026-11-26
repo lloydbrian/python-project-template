@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a change to the template, its gates or its workflows.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What goes wrong or is missing today, for whom? A real example helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What the template would do differently. Which project types does it affect?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Fits the template's rules
+      description: See CONTRIBUTING.md. A proposal can still be discussed if it does not; say why.
+      options:
+        - label: Works with Podman (rootless) and keeps every pin pinned
+        - label: A new gate or rule can be proven to fail (negative control)
