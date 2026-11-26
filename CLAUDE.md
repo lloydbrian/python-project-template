@@ -14,7 +14,7 @@ This repository is `python-project-template`: a Copier template (`template/`, `c
 ## Repository facts that bite
 
 - **Podman only.** No Docker anywhere (ADR 0003).
-- **`main` is protected:** changes arrive by PR; 11 required checks, bound to GitHub Actions.
+- **`main` is protected:** changes arrive by PR; 13 required checks (template-ci, including the release dry run on amd64 and arm64), bound to GitHub Actions.
 - **Tags never move.** The `release-tags` ruleset blocks updating or deleting `v*` tags, with no bypass (ADR 0007). Fix a bad release with the next tag (`-rc.N+1`, `vX.Y.Z+1`).
 - **A release needs `template_ref` in `copier.yml` equal to the tag** (`scripts/check_pins.py --release --tag <tag>`).
 - **Gate before delivery:** `mise run template-ci` (renders 8 variants, 25 negative controls, update test; with `REQUIRE_CONTAINER=1` also the release dry run on this machine's arch). Container stages need `REQUIRE_CONTAINER=1` and a running Podman machine.
