@@ -21,6 +21,17 @@ mise tasks                          # list maintainer tasks
 6. Add an entry under **Unreleased** in `CHANGELOG.md`.
 7. Run the full gate before opening a PR: `mise run template-ci`. Add `REQUIRE_CONTAINER=1 mise run render-test -- service` if you touched the Containerfile, compose, the smoke task or the workflows, and `mise run release-dry-run -- <amd64|arm64>` (your machine's arch) if you touched `python-release.yml` or anything the release builds: it runs the release build job's steps on a rendered service without a tag. CI runs it on both arches.
 
+## Your first contribution
+
+New here? Issues labelled [`good first issue`](https://github.com/lloydbrian/python-project-template/labels/good%20first%20issue) are small, self-contained and list what "done" means.
+
+1. Comment on the issue so nobody else starts the same work.
+2. Fork the repo, then follow [Set up](#set-up) and [Make a change](#make-a-change) above.
+3. For documentation-only changes, `mise run lint` is enough before you open the PR: it runs the hooks, the doc-command check and the pin policy. Anything under `template/` needs `mise run template-ci`.
+4. Open the PR against `main` and describe what you changed and how you checked it. CI runs the full template matrix; the maintainer reviews and merges.
+
+Not sure where to start? Open a question with the issue form and say what you would like to work on.
+
 ## Rules of thumb
 
 - **Every variant must pass its own gates when generated.** If a change only works for one variant, guard it with a condition (`{% if project_type == "service" %}`).
@@ -32,6 +43,10 @@ mise tasks                          # list maintainer tasks
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `refactor:`, `test:`. A breaking change for generated projects (a removed question, a renamed file) uses `feat!:` and a **Breaking** note in the changelog with the migration step.
+
+## License of contributions
+
+Unless you explicitly state otherwise, any contribution you submit for inclusion in this repository is dual-licensed under MIT OR Apache-2.0, as the [README](README.md#license) describes, without any additional terms or conditions.
 
 ## Releasing
 
