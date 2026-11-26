@@ -1,5 +1,7 @@
 # Session handoff: python-project-template v2.0.0
 
+> **Closed (2026-11-25):** v2.0.0 is released (`8e4d1a6`, release run 45720703997) and the reference app `template-repo` runs it (`13fdf39`). This handoff is kept as the record of how v2.0.0 was delivered and is no longer updated; current state and every release since are in [`docs/RELEASES.md`](RELEASES.md).
+
 **State (2026-11-24):** the operator ran runbook steps 0–7. PR #2 is merged as `9baafb4`, the repo is renamed `python-project-template`, `main` is protected (11 required checks bound to GitHub Actions), the `release-tags` ruleset protects `v*` with no bypass, and `v2.0.0-rc.1` is released (pre-release). Step 8 found a template bug when `template-repo` kept its v1 `.env.dev`: `APP_TITLE=` (blank) reached FastAPI as an empty title and the service crashed at import. Fixed in `v2.0.0-rc.2` (released). The reference app's test release (`v0.1.0`) then failed at Scan on both architectures: trivy 0.76 cannot read an OCI archive file with `--input` (reproduced; a docker archive or an unpacked OCI layout works). Fixed for `v2.0.0-rc.3`: release and local scan/SBOM read the unpacked layout. The `v0.1.0` tag exists in `template-repo` without a release and is recreated after the reference app moves to rc.3.
 
 ## What changed

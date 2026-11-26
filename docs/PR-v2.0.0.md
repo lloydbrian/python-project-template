@@ -1,5 +1,7 @@
 ## python-project-template v2.0.0: one Copier template for every Python project
 
+> **Closed (2026-11-25):** v2.0.0 is released (`8e4d1a6`, release run 45720703997) and the reference app `template-repo` runs it (`13fdf39`). This PR body is kept as the record of how v2.0.0 was delivered and is no longer updated; current state and every release since are in [`docs/RELEASES.md`](RELEASES.md).
+
 **Breaking.** `template-repo-files` becomes a Copier template, renamed `python-project-template` after merge. The v1 copy-paste folders are removed.
 
 ### Why

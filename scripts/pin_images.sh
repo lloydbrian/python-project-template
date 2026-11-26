@@ -56,7 +56,25 @@ for pair in os.environ["PAIRS"].split():
 new, n2 = re.subn(r"(uv_image_digest:\n(?:  .*\n)*?  default: )\S+", r"\g<1>" + os.environ["DUV"], new)
 if n1 != len(os.environ["PAIRS"].split()) or n2 != 1:
     sys.exit(f"copier.yml anchors not found (python={n1}, uv={n2}); nothing changed")
-diff = "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True), "copier.yml", "copier.yml"))
+
+def unified(a, b, name, n=3):
+    # difflib.unified_diff cannot turn off autojunk, which treats lines that are frequent in a file
+    # of 200+ lines (copier.yml: "  when: false") as junk and shows them as changed when they are not.
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    out = []
+    for group in sm.get_grouped_opcodes(n):
+        i1, i2, j1, j2 = group[0][1], group[-1][2], group[0][3], group[-1][4]
+        out.append(f"@@ -{i1 + 1},{i2 - i1} +{j1 + 1},{j2 - j1} @@\n")
+        for tag, a1, a2, b1, b2 in group:
+            if tag == "equal":
+                out += [" " + line for line in a[a1:a2]]
+                continue
+            out += ["-" + line for line in a[a1:a2]]
+            out += ["+" + line for line in b[b1:b2]]
+    return "".join([f"--- {name}\n", f"+++ {name}\n", *out]) if out else ""
+
+
+diff = unified(old.splitlines(True), new.splitlines(True), "copier.yml")
 print(diff or "copier.yml already up to date")
 if os.environ["WRITE"] == "1" and diff:
     open(path, "w").write(new)

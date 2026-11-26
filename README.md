@@ -54,11 +54,11 @@ The template removes those failure modes structurally rather than by asking peop
 **New project:**
 
 ```bash
-copier copy --vcs-ref v2.0.0 gh:lloydbrian/python-project-template my-project
+copier copy --vcs-ref v2.0.1 gh:lloydbrian/python-project-template my-project
 cd my-project && git init         # git first: bootstrap installs the git hooks
 mise trust && mise install && mise run bootstrap      # creates uv.lock, which CI needs committed
 cp .env.example .env.dev          # fill values locally; never committed
-git add -A && git commit -m "chore: scaffold from python-project-template v2.0.0"
+git add -A && git commit -m "chore: scaffold from python-project-template v2.0.1"
 mise run ci                       # everything CI checks, locally
 ```
 
@@ -67,7 +67,7 @@ The generated `README.md` explains every file, task and decision in that project
 **Non-interactive** (scripts, or to repeat a set-up exactly):
 
 ```bash
-copier copy --vcs-ref v2.0.0 --defaults \
+copier copy --vcs-ref v2.0.1 --defaults \
   --data project_name="Ticket Triage" --data project_type=service \
   gh:lloydbrian/python-project-template ticket-triage
 ```
@@ -114,7 +114,7 @@ The decision, the alternatives and the trade-offs are in [ADR 0012](docs/adr/001
 **Non-interactive** (the same project type and stack as the `service-ai-lancedb` variant template CI tests):
 
 ```bash
-copier copy --vcs-ref v2.0.0 --defaults \
+copier copy --vcs-ref v2.0.1 --defaults \
   --data project_type=service --data ai_stack=lancedb --data project_name="Ticket Triage" \
   gh:lloydbrian/python-project-template ticket-triage
 ```
@@ -228,13 +228,13 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Secrets | `gitleaks` hook (staged) + `gitleaks git` in `mise run ci` (full history) | A token, key or password in any commit, including ones made with `--no-verify` |
 | Dependencies | `pip-audit` | A dependency with a published CVE |
 | Code security | `bandit` | Insecure patterns in `src/` |
-| Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is not copied by the Containerfile, is excluded by `.containerignore`, or a `license-files` entry is missing |
+| Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is not copied by the Containerfile, is excluded by `.containerignore`, or a `license-files` entry is missing; or the OS-upgrade layer cannot be refreshed (no `ARG OS_REFRESH` before `apt-get upgrade`, or `mise run image` does not pass it) |
 | Image tests | `podman build --target test` | Tests fail inside the image |
 | Dependency audit exceptions | `.pip-audit-ignore` (+ exception checker) | An undocumented, undated, expired or over-90-day entry; only listed IDs are ever ignored |
 | Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`, VEX file or `TRIVY_*` setting in `.mise.toml` that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 24 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, blank env values falling back to defaults, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, paste-unsafe doc commands, and the project-name validator. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 25 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, blank env values falling back to defaults, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, an OS-upgrade layer that cannot be refreshed (`OS_REFRESH`), expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, paste-unsafe doc commands, and the project-name validator. A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -266,13 +266,13 @@ Every generated project ships with these gates, and every gate exits non-zero on
 ```text
  generated project                          this repo (python-project-template)
  ─────────────────                          ───────────────────────────────────
- .github/workflows/ci.yml  ── uses ──▶  .github/workflows/python-ci.yml@v2.0.0
+ .github/workflows/ci.yml  ── uses ──▶  .github/workflows/python-ci.yml@v2.0.1
    with: image, smoke, mise-version          checkout (full history) → mise install → mise run ci
                                              (hooks, types, tests, security, history secret scan)
                                              → podman build --target test → image → scan → sbom
                                              → smoke → upload SBOM
 
- .github/workflows/release.yml ─ uses ─▶ .github/workflows/python-release.yml@v2.0.0
+ .github/workflows/release.yml ─ uses ─▶ .github/workflows/python-release.yml@v2.0.1
    on: tag vX.Y.Z                            build job, per arch (amd64, arm64), read-only token:
                                              gates → test stage → image → OCI archive → scan → SBOM
                                              attest job (no project code, id-token): provenance
@@ -294,7 +294,7 @@ Every generated project ships with these gates, and every gate exits non-zero on
 
 - **Pinned by release tag.** A project's CI changes only when the project runs `copier update` and the new `template_ref` lands in its `ci.yml`. A template change can never break a project's CI unannounced.
 - **Actions and pre-commit hooks pinned by commit SHA**, with the version tag in a comment. `scripts/check_pins.py` enforces this in the lint job.
-- **Projects call the shared workflows by release tag** (`@v2.0.0`), because Copier can only render the tag. Protect `v*` tags in this repo with a ruleset that blocks updates and deletion, so a tag cannot be moved to different code (runbook step 6).
+- **Projects call the shared workflows by release tag** (`@v2.0.1`), because Copier can only render the tag. Protect `v*` tags in this repo with a ruleset that blocks updates and deletion, so a tag cannot be moved to different code (runbook step 6).
 - **Least-privilege tokens**: `contents: read` by default. Only the `attest` job gets `id-token: write` and `attestations: write`, and it runs none of the project's code; only `publish` gets `contents: write`.
 - **Branch protection**: require the check **`check / check`** (caller job `check` → reusable job `check`).
 - **Private template repo**: projects can only call its workflows if *Settings → Actions → General → Access* allows repositories owned by the same user.
@@ -398,7 +398,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 ├── .github/
 │   ├── workflows/python-ci.yml        shared CI that projects call (workflow_call)
 │   ├── workflows/python-release.yml   shared release: multi-arch OCI archives, SBOM, provenance
-│   ├── workflows/template-ci.yml      this repo's CI: lint, render matrix, controls, update test
+│   ├── workflows/template-ci.yml      this repo's CI: lint, render matrix, controls, update test, release dry run
 │   ├── workflows/release.yml          releases the template on a version tag
 │   └── CODEOWNERS
 ├── scripts/
@@ -406,6 +406,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 │   ├── image_sim.py              build-context check of the Containerfile without a container engine
 │   ├── negative_controls.py      prove every gate can fail
 │   ├── update_test.py            prove copier update works
+│   ├── release_dry_run.py        run python-release.yml's build steps on a rendered service, no tag
 │   ├── check_shell_snippets.py  doc commands stay paste-safe in zsh and bash (no history expansion)
 │   ├── check_pins.py             SHA-pinned actions, tagged images, version agreement, release checks
 │   ├── pin_images.sh             resolve base-image digests (operator, dry run by default)
@@ -453,7 +454,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 24 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | 25 negative controls in template CI |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 26 LTS (no Corepack: Node 25+ dropped it), Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |

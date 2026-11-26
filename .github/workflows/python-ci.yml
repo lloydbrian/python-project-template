@@ -53,7 +53,7 @@ jobs:
 
       - name: Tests inside the image
         if: inputs.image
-        run: podman build -f .container/Containerfile --target test .
+        run: podman build --build-arg OS_REFRESH="$(date -u +%F)" -f .container/Containerfile --target test .   # daily OS refresh, as `mise run image`
 
       - name: Build image
         if: inputs.image

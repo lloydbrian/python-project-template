@@ -207,6 +207,13 @@ CONTROLS = [
         marker="FileNotFoundError",
     ),
     Control(
+        "image-os-refresh",
+        "an OS-upgrade layer that cannot be refreshed (no ARG OS_REFRESH before apt-get upgrade) fails the build check",
+        f"python3 {ROOT}/scripts/image_sim.py .",
+        lambda p: edit(p / ".container/Containerfile", "ARG OS_REFRESH=unset\n", ""),
+        marker="no `ARG OS_REFRESH` before `apt-get upgrade`",
+    ),
+    Control(
         "prod-api-docs",
         "production does not serve /docs or /openapi.json",
         'uv run pytest -q --no-cov -m "not live" tests/test_health.py',

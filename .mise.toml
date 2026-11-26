@@ -40,6 +40,10 @@ for v in service library library-container notebooks service-ai-lancedb notebook
 done
 """
 
+[tasks.release-dry-run]
+description = "Run python-release.yml's build steps (build, export, unpack, scan, SBOM) on a rendered service, no tag: mise run release-dry-run -- arm64"
+run = "uv run --no-project --with 'pyyaml==6.0.4' python scripts/release_dry_run.py --arch"
+
 [tasks.negative-controls]
 description = "Break each rule on purpose and prove a named check fails (add -- --offline to skip PyPI)"
 run = "python3 scripts/negative_controls.py"
@@ -60,7 +64,14 @@ run = "bash scripts/pin_images.sh"
 description = "Everything template-ci.yml runs, locally"
 depends = ["lint"]
 run = """
+set -eu
 mise run render-all
 python3 scripts/negative_controls.py
 python3 scripts/update_test.py
+if [ "${REQUIRE_CONTAINER:-}" = 1 ]; then   # the release dry run always builds an image
+  case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; *) arch=arm64 ;; esac
+  mise run release-dry-run -- "$arch"
+else
+  echo "release dry run skipped (set REQUIRE_CONTAINER=1 to run it on this machine's arch)"
+fi
 """

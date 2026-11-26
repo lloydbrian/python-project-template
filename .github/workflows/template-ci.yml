@@ -47,6 +47,31 @@ jobs:
           install: true
       - run: mise run render-test -- ${{ matrix.variant }}
 
+  release-dry-run:
+    name: release-dry-run (${{ matrix.arch }})   # stable check name for branch protection
+    # python-release.yml's build job, step by step, on a rendered service: catches release-path
+    # bugs (like rc.3's scan) in the PR instead of at a real tag. Read-only token; no attest/publish.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0       # copier renders from git
+          persist-credentials: false
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        with:
+          version: "2026.11.14"
+          install: true
+      - run: mise run release-dry-run -- ${{ matrix.arch }}
+
   negative-controls:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
