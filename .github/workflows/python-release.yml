@@ -92,8 +92,10 @@ jobs:
 
       - name: Build (native ${{ matrix.arch }})
         run: |
-          podman build --pull=newer -f .container/Containerfile --target test .
-          podman build --pull=newer -f .container/Containerfile --target "$TARGET" \
+          # OS_REFRESH: re-run the cached OS-upgrade layer daily (matters on runners that keep a cache)
+          refresh="$(date -u +%F)"
+          podman build --pull=newer --build-arg OS_REFRESH="$refresh" -f .container/Containerfile --target test .
+          podman build --pull=newer --build-arg OS_REFRESH="$refresh" -f .container/Containerfile --target "$TARGET" \
             --label org.opencontainers.image.version="$VERSION" \
             --label org.opencontainers.image.revision="$GITHUB_SHA" \
             --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \

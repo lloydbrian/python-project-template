@@ -1,5 +1,7 @@
 # Runbook: release python-project-template v2.0.0
 
+> **Closed (2026-11-25):** v2.0.0 is released (`8e4d1a6`, release run 45720703997) and the reference app `template-repo` runs it (`13fdf39`). This runbook is kept as the record of how v2.0.0 was delivered and is no longer updated; current state and every release since are in [`docs/RELEASES.md`](RELEASES.md).
+
 The **operator** (LBD) runs every step on the Mac. Claude built, tested and reviewed the change. It pushed, tagged and renamed nothing.
 
 Each step has a **pre-flight** (check before), the **command**, **Expect** (what success looks like), a **Stop if**, and a **post-flight** where useful. Commands that change anything outside your working tree are marked **[changes remote]**, with how to undo them.

@@ -185,7 +185,11 @@ def gates(data: dict[str, object], out: Path, runner: str) -> None:
     if os.environ.get("REQUIRE_CONTAINER") != "1":
         print("  container stages skipped (set REQUIRE_CONTAINER=1 to build, scan and smoke-test)")
         return
-    run("podman build -f .container/Containerfile --target test .", cwd=out, env=env)
+    run(
+        'podman build --build-arg OS_REFRESH="$(date -u +%F)" -f .container/Containerfile --target test .',
+        cwd=out,
+        env=env,
+    )
     for task in ("image", "scan", "sbom") + (("smoke",) if ptype == "service" else ()):
         run(f"mise run {task}", cwd=out, env=env)
 

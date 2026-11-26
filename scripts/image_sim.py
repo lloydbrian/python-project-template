@@ -9,7 +9,10 @@ copies into an empty folder ONLY what the stages' `COPY <src> <dst>` lines copy 
 pyproject.toml was copied, and runs the
 stages' `RUN` commands there (uv sync, pytest), skipping OS-level steps (apt-get, useradd,
 chown, chmod). It catches build-context mistakes: a file the tests or the package build need
-but the Containerfile never copies. It does not replace a real `podman build`.
+but the Containerfile never copies. It also checks that the OS-upgrade layer can be refreshed:
+the first stage declares `ARG OS_REFRESH` before its `apt-get upgrade`, and `mise run image`
+passes `--build-arg OS_REFRESH=...` (a digest-pinned base never invalidates that cached layer by
+itself). It does not replace a real `podman build`.
 Standard library only.
 """
 
@@ -84,6 +87,28 @@ def chain(all_stages: dict[str, tuple[str, list[tuple[str, str]]]], target: str)
     return order
 
 
+def check_os_refresh(project: Path, all_stages: dict[str, tuple[str, list[tuple[str, str]]]], first: str) -> None:
+    """The cached `apt-get upgrade` layer must be re-runnable: ARG OS_REFRESH before it, passed by `mise run image`."""
+    steps = all_stages[first][1]
+    upgrade = next((i for i, (word, rest) in enumerate(steps) if word == "RUN" and "apt-get upgrade" in rest), None)
+    if upgrade is None:
+        return
+    args = [i for i, (word, rest) in enumerate(steps) if word == "ARG" and rest.split("=")[0].strip() == "OS_REFRESH"]
+    if not args or args[0] > upgrade:
+        sys.exit(
+            f"image_sim: [{first}] no `ARG OS_REFRESH` before `apt-get upgrade`: "
+            "a cached upgrade layer would never refresh"
+        )
+    mise = (project / ".mise.toml").read_text()
+    task = re.search(r"^\[tasks\.image\]\n(.*?)(?=^\[|\Z)", mise, re.MULTILINE | re.DOTALL)
+    if not task or "--build-arg OS_REFRESH=" not in task.group(1):
+        sys.exit(
+            "image_sim: `mise run image` does not pass --build-arg OS_REFRESH=...: "
+            "the OS-upgrade layer would never refresh"
+        )
+    print(f"image_sim: [{first}] OS_REFRESH declared before apt-get upgrade and passed by `mise run image`")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("project", type=Path)
@@ -94,6 +119,7 @@ def main() -> None:
     order = chain(all_stages, args.target)
     if not order or order[-1] != args.target:
         raise SystemExit(f"image_sim: no stage named {args.target}")
+    check_os_refresh(project, all_stages, order[0])
     rules = ignore_rules(project)
     python = re.search(r'^python\s*=\s*"([^"]+)"', (project / ".mise.toml").read_text(), re.MULTILINE)
     with tempfile.TemporaryDirectory(prefix="image-sim-") as tmp:

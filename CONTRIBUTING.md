@@ -19,7 +19,7 @@ mise tasks                          # list maintainer tasks
    If the image needs a new file, `COPY` it in the Containerfile: `scripts/image_sim.py` (run by every render test) fails otherwise.
 5. Keep the reasoning with the change. Comment non-obvious lines in the template. Update the generated README (`template/README.md.jinja`) when behaviour or a task changes. Add an ADR in `docs/adr/` for a real decision.
 6. Add an entry under **Unreleased** in `CHANGELOG.md`.
-7. Run the full gate before opening a PR: `mise run template-ci`. Add `REQUIRE_CONTAINER=1 mise run render-test -- service` if you touched the Containerfile, compose, the smoke task or the workflows.
+7. Run the full gate before opening a PR: `mise run template-ci`. Add `REQUIRE_CONTAINER=1 mise run render-test -- service` if you touched the Containerfile, compose, the smoke task or the workflows, and `mise run release-dry-run -- <amd64|arm64>` (your machine's arch) if you touched `python-release.yml` or anything the release builds: it runs the release build job's steps on a rendered service without a tag. CI runs it on both arches.
 
 ## Rules of thumb
 

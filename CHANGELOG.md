@@ -4,6 +4,20 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-26
+
+### Fixed
+- `mise run image` no longer reuses a stale OS-upgrade layer. The base image is pinned by digest, so `--pull=newer` never invalidated the cached `apt-get upgrade` layer, and a local image could keep OS packages from before a security fix while CI (no cache) had it. The Containerfile declares `ARG OS_REFRESH` before the upgrade and `mise run image` passes today's UTC date, so the layer re-runs at most once a day; the in-image test build (`python-ci.yml`, the README command, `scripts/render.py`) and the release build pass it too. The README's scan advice now says to rebuild with `--no-cache` for an OS package. Found in the reference app's local `mise run image` after v2.0.0.
+- `mise run pin-images` shows only the lines it changes. `difflib.unified_diff` cannot turn off autojunk, which in a file of 200+ lines (`copier.yml`) treats frequent lines such as `when: false` as junk and showed unchanged lines as changed.
+- CHANGELOG 2.0.0 lists ADRs 0001–0012 (0012 was missing).
+
+### Added
+- Release dry run: `mise run release-dry-run -- <arch>` (`scripts/release_dry_run.py`) runs the `run:` steps of `python-release.yml`'s build job on a rendered service without a tag (version check, gates, build, OCI export, unpack, scan, SBOM) and checks `dist/` matches the attest job's subjects. Template CI runs it on amd64 and arm64 with a read-only token, so release-path bugs like rc.3's scan fail the PR instead of a tag. It refuses any workflow expression or step key it cannot emulate. `attest` and `publish` still need a real tag.
+- Negative control `image-os-refresh` (25 controls): removing `ARG OS_REFRESH` must fail the image build-context check.
+
+### Not changed
+- No `jactionlint` step: no such tool exists; `actionlint` already runs in `mise run lint` and template CI.
+
 ## [2.0.0] - 2026-11-25
 
 **Breaking:** the repository becomes a Copier template (`python-project-template`). The v1 copy-paste folders are removed. Existing v1 projects can adopt v2 by running `copier copy` into a branch and merging (see the v1 → v2 table in README.md).
@@ -17,7 +31,7 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 - Template CI: render matrix (8 variants: service, library, library-container, notebooks, the two AI stacks, and the service on 3.14 and 3.13) with an image build-context simulation (`scripts/image_sim.py`), 24 negative controls, `copier update` test, pin policy, actionlint.
 - `scripts/pin_images.sh` to pin base images by multi-arch digest (ADR 0007).
 - README section on starting an AI project: choose `service` or `notebooks`, then `ai_stack`.
-- ADRs 0001–0011, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
+- ADRs 0001–0012, CONTRIBUTING, SECURITY, CODEOWNERS, `.delivery-loop.yml`.
 - Optional container for libraries (`include_container`).
 - `mise run ci` includes pip-audit, bandit and a full-history gitleaks scan, so it equals what CI runs.
 - Copier validators reject names, descriptions and kernel names that would break TOML, Python or shell; the slug drops other characters.
