@@ -97,7 +97,7 @@ The reasoning behind each decision is recorded as ADRs in the template repo (`do
 | **ruff** | Lint and format | One Rust binary replaces flake8, isort, pyupgrade, black and many plugins, and runs in milliseconds | black + flake8 + isort (three configs, slower) |
 | **mypy** (strict) | Static type checking | Mature, strict mode catches `None` and `Any` leaks{% if svc %}; the pydantic plugin understands settings models{% endif %} | pyright (fine in the editor via Pylance; mypy stays the CI gate for plugin support) |
 | **pytest** + pytest-cov | Tests with a coverage floor | De-facto standard; fixtures; `--strict-markers` stops typo'd markers silently skipping tests | unittest (verbose, no fixtures) |
-| **pre-commit** | Runs format, lint, lockfile and secret checks on every commit | Catches problems before they reach a PR; the same hooks run in CI via `pre-commit run --all-files` | Husky (Node-centric), manual discipline |
+| **pre-commit** | Runs format, lint, lockfile, secret and workflow-security checks on every commit | Catches problems before they reach a PR; the same hooks run in CI via `pre-commit run --all-files` | Husky (Node-centric), manual discipline |
 | **gitleaks** | Secret scanning: staged changes on commit (hook) and the full git history in `mise run ci` | Fast, broad rule set, no service to call. The history scan catches anything committed past the hook (`--no-verify`, web edits) | detect-secrets (baseline file to maintain) |
 | **pip-audit** + **bandit** | Dependency CVEs and insecure code patterns (`mise run security`) | Uses the PyPA advisory database; bandit flags `eval`, weak crypto, shell injection | Safety (licensed DB) |
 {%- if has_container %}
@@ -159,7 +159,7 @@ Run `mise tasks` to list them. Every task exits non-zero on failure, so it can g
 git pull && uv sync               # start of day: pick up teammates' dependency changes
 mise run lint && mise run test    # while coding (or rely on editor format-on-save)
 mise run ci                       # before push: identical to CI
-git add -A && git commit -m "feat: ..."   # hooks run: format, lint, lockfile, secrets
+git add -A && git commit -m "feat: ..."   # hooks run: format, lint, lockfile, secrets, workflow scan
 git push
 ```
 
@@ -182,12 +182,17 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:
 {%- if has_devcontainer %}
 ├── .devcontainer/         VS Code dev container on Podman (--userns=keep-id)
 {%- endif %}
-├── .github/workflows/
+├── .github/
+{%- if dependency_updates %}
+│   ├── dependabot.yml     weekly PRs for uv.lock (Python dependencies only)
+{%- endif %}
+│   ├── zizmor.yml         workflow-scan exceptions, each with its reason
+│   └── workflows/
 {%- if has_container %}
-│   ├── ci.yml             calls the template's shared, pinned CI workflow
-│   └── release.yml        tag v<version> → amd64/arm64 OCI archives + SBOM + provenance (no registry)
+│       ├── ci.yml         calls the template's shared, pinned CI workflow
+│       └── release.yml    tag v<version> → amd64/arm64 OCI archives + SBOM + provenance (no registry)
 {%- else %}
-│   └── ci.yml             calls the template's shared, pinned CI workflow
+│       └── ci.yml         calls the template's shared, pinned CI workflow
 {%- endif %}
 ├── .vscode/settings.json  {% if has_devcontainer %}ruff format on save (the dev container sets its own interpreter){% else %}interpreter pin (.venv) + ruff format on save{% endif %}
 ├── .env.example           variable NAMES only (committed); copy to .env.dev/.env.test
@@ -248,6 +253,7 @@ The **src layout** (`src/{{ package_name }}/`) means tests import the installed 
 | `pytest --cov` | Behaviour regressions | Coverage floor **{{ coverage_threshold }}%** with branch coverage: low enough to be achievable, high enough that untested modules stand out |
 | `uv-lock` hook | `pyproject.toml` changed without updating `uv.lock` | Lockfile must match |
 | `gitleaks` | API keys, tokens and private keys: staged changes (hook) and every commit in history (`mise run ci`) | Any finding blocks the commit or fails CI |
+| `zizmor` | Unsafe workflow patterns: template injection, broad permissions, actions not pinned by SHA{% if dependency_updates %}, a Dependabot cooldown under 7 days{% endif %} | Any finding fails. Runs offline. Exceptions live in `.github/zizmor.yml`, each with its reason |
 {%- if nb %}
 | `nbstripout` / `nbQA` | Committed outputs (data, secrets, huge diffs); lint errors in notebook cells | Outputs always stripped |
 {%- endif %}
@@ -517,6 +523,8 @@ uses: {{ github_owner }}/python-project-template/.github/workflows/python-ci.yml
 
 The shared workflow installs the pinned mise and runs `mise run ci`{% if has_container %}. It then builds the `test` stage, builds the image with Podman, scans it with trivy and uploads the SBOM{% if svc %}, and runs the smoke test{% endif %}{% endif %}. All third-party actions and pre-commit hooks are pinned by commit SHA.
 
+The `zizmor` hook checks the workflows themselves. Its one exception (`.github/zizmor.yml`) lets `ci.yml`{% if has_container %} and `release.yml`{% endif %} call the template's shared workflows by release tag, because the template's tags never move; any other action must be pinned by SHA.
+
 **Why a shared workflow:** CI logic lives in one place. Fixes and hardening reach every project when `copier update` bumps the pinned version, rather than being copy-pasted into each repo.
 
 Branch protection should require the check named **`check / check`**.
@@ -543,7 +551,13 @@ Branch protection should require the check named **`check / check`**.
 - A service keeps its web framework in `dependencies`, because images install no extras. The `ai` extra holds the data stack (numpy, pandas) for local analysis; anything the running service needs belongs in `dependencies`.
 {%- endif %}
 - Upgrade deliberately: `uv lock --upgrade-package <name>` for one package, `uv lock --upgrade` for everything. Then run `mise run ci` and `mise run security`.
-- There is no automated dependency bot. Review upgrades on a schedule (for example monthly) and after security advisories.
+{%- if dependency_updates %}
+- **Dependabot** (`.github/dependabot.yml`) opens a weekly PR that updates `uv.lock`, with minor and patch updates grouped, once a release is 7 days old. CI runs on it like on any change; merge it when it passes. It changes `uv.lock` only (`versioning-strategy: lockfile-only`): the version floors in `pyproject.toml`, the shared CI workflow, the hooks, the base images and the tool versions arrive together, tested, with `copier update`, so the two never conflict.
+- **Switch on Dependabot alerts and security updates** once, in the repository's security settings. A security update opens as soon as an advisory is published; the cooldown does not delay it.
+- To turn Dependabot off without moving to a newer template release: `copier update --skip-answered --vcs-ref "$(sed -n 's/^_commit: //p' .copier-answers.yml)" --data dependency_updates=false`, then review and commit the change.
+{%- else %}
+- Dependabot is off (`dependency_updates` is `false`). Review upgrades on a schedule (for example monthly) and after security advisories. To turn it on without moving to a newer template release: `copier update --skip-answered --vcs-ref "$(sed -n 's/^_commit: //p' .copier-answers.yml)" --data dependency_updates=true`, then review and commit the change.
+{%- endif %}
 
 ---
 

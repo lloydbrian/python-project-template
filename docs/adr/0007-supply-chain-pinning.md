@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted |
+| **Status** | Accepted; the "no dependency bot" clause is superseded by [ADR 0013](0013-dependabot-for-actions-hooks-and-python-dependencies.md) |
 | **Date** | 2026-11-23 |
 | **Decided by** | LBD |
 ## Context

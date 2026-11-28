@@ -4,11 +4,24 @@ All notable changes to python-project-template. Format: [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-27
+
 ### Added
 - License: MIT OR Apache-2.0, at the user's option (`LICENSE-MIT`, `LICENSE-APACHE`). Projects generated from the template are the user's own, with no attribution required; their license is still chosen with the `license` question.
 - `docs/design-choices.md`: why Podman, no registry and tags that never move, what each costs, how Podman compares with Docker, containerd and Kubernetes, and how a generated project could move to Docker or Kubernetes.
 - README opens with the version and license, a recorded quickstart (`docs/demo/quickstart.tape`, re-recordable with VHS), and a "Find your way" table by audience; project metadata and license sections at the end.
 - Issue forms (bug, feature, question; blank issues off, security reports routed to private reporting), a "Your first contribution" section in CONTRIBUTING, and a Sponsor button (`.github/FUNDING.yml`).
+- Question `dependency_updates` (default `true`): generated projects get `.github/dependabot.yml` that updates `uv.lock` only (`lockfile-only`; weekly, minor and patch grouped, 7-day cooldown). Existing projects receive it on their next `copier update`; answer `false` to opt out (ADR 0013).
+- Dependabot for this repo (`.github/dependabot.yml`): GitHub Actions (grouped) and the root pre-commit hooks (one PR per hook), 7-day cooldown (ADR 0013). CONTRIBUTING explains how to finish a hook PR.
+- zizmor workflow scanning (v1.33.1, offline, any finding fails) as a pre-commit hook here and in every generated project, with its exceptions in `.github/zizmor.yml`: generated projects may call the template's shared workflows by release tag; any other action must be pinned by SHA (ADR 0014).
+- `check_pins.py`: a hook in both this repo's and the template's pre-commit config must use the same rev and frozen tag; the gitleaks hook's tag must match `gitleaks_version`; the template's Dependabot config may list only `uv`, with `lockfile-only`.
+- Negative controls (33): `hook-rev-agreement`, `gitleaks-version-agreement`, `dependabot-uv-only`, `dependabot-lockfile-only`, `release-gate`, `dependency-updates-off`, `workflow-scan`, `workflow-scan-pin-scope`. The `service-py313` variant renders with `dependency_updates=false`. The update test proves a project generated before the question receives Dependabot on update, and that answering `false` removes it.
+
+### Upgrade note
+- After `copier update` to 2.1.0, the zizmor hook scans every workflow in `.github/workflows`, including ones you added. An action there pinned by tag (`@v4`) fails `mise run ci`: pin it by commit SHA (with the tag in a comment), or add an exception with its reason to `.github/zizmor.yml`.
+
+### Changed
+- ADR 0007's "no dependency bot" clause is superseded by ADR 0013; the rest of ADR 0007 stands. The README and the generated README describe the new update flow.
 
 ## [2.0.1] - 2026-11-26
 

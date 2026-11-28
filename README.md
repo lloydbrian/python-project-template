@@ -136,6 +136,7 @@ Answers are saved in the project's `.copier-answers.yml` and reused by every `co
 | `github_owner` | always | `lloydbrian` | Where the project's CI finds the shared workflow |
 | `coverage_threshold` | always | `80` | `fail_under` for pytest-cov |
 | `license` | always | `Proprietary` | `Proprietary` writes no LICENSE file; `MIT` and `Apache-2.0` write the full text |
+| `dependency_updates` | always | `true` | Writes `.github/dependabot.yml`: weekly PRs that update `uv.lock` only (`lockfile-only`), minor and patch grouped, 7-day cooldown. The `pyproject.toml` floors and every other template-owned pin arrive with `copier update` ([ADR 0013](docs/adr/0013-dependabot-for-actions-hooks-and-python-dependencies.md)) |
 | `http_port` | service | `8000` | Port used by uvicorn, compose, smoke test and `.env.example`. Must be ≥1024 (rootless Podman cannot bind lower) |
 | `include_container` | library | `false` | Adds the Containerfile, scanning, SBOM and image CI to a library (for CLIs you ship as images) |
 | `include_devcontainer` | when there is a container | `true` | VS Code dev container on Podman |
@@ -154,10 +155,12 @@ my-project/
 ├── .copier-answers.yml         answers + template version (drives copier update)
 ├── .mise.toml                  pinned Python, uv, gitleaks (+ trivy) + every task
 ├── pyproject.toml  uv.lock     metadata, deps, dependency groups, ruff/mypy/pytest/coverage config
-├── .pre-commit-config.yaml     hygiene, uv-lock, ruff, gitleaks (+ nbstripout/nbQA), SHA-pinned
+├── .pre-commit-config.yaml     hygiene, uv-lock, ruff, gitleaks, zizmor (+ nbstripout/nbQA), SHA-pinned
 ├── .gitignore  .env.example    hardened ignores; variable names only
 ├── .vscode/settings.json       per-repo interpreter + format on save
 ├── .github/workflows/ci.yml    short caller of the shared, pinned CI workflow
+├── .github/zizmor.yml          workflow-scan exceptions, each with its reason
+├── .github/dependabot.yml      weekly uv.lock updates (unless dependency_updates=false)
 ├── src/<package>/  tests/      src layout, strict types, tests that pass from day one
 ├── docs/adr/  CHANGELOG.md     the project's own decision log and change history
 ├── README.md                   full developer reference for THIS project
@@ -224,13 +227,14 @@ Every generated project ships with these gates, and every gate exits non-zero on
 | Secrets | `gitleaks` hook (staged) + `gitleaks git` in `mise run ci` (full history) | A token, key or password in any commit, including ones made with `--no-verify` |
 | Dependencies | `pip-audit` | A dependency with a published CVE |
 | Code security | `bandit` | Insecure patterns in `src/` |
+| Workflow security | `zizmor` hook (offline) | Template injection, broad permissions, an action not pinned by SHA (only the template's shared workflows may be called by release tag), a Dependabot cooldown under 7 days ([ADR 0014](docs/adr/0014-scan-workflows-with-zizmor.md)) |
 | Image build context | `scripts/image_sim.py` (template CI) | A file the image build or in-image tests need is not copied by the Containerfile, is excluded by `.containerignore`, or a `license-files` entry is missing; or the OS-upgrade layer cannot be refreshed (no `ARG OS_REFRESH` before `apt-get upgrade`, or `mise run image` does not pass it) |
 | Image tests | `podman build --target test` | Tests fail inside the image |
 | Dependency audit exceptions | `.pip-audit-ignore` (+ exception checker) | An undocumented, undated, expired or over-90-day entry; only listed IDs are ever ignored |
 | Image scan | `trivy` (+ exception checker) | Fixable HIGH/CRITICAL; an expired, undocumented or over-90-day exception; or a `trivy.yaml`, VEX file or `TRIVY_*` setting in `.mise.toml` that could bypass the policy |
 | Smoke (service) | `mise run smoke` | Health endpoints or request-ID echo fail with the image running read-only, all capabilities dropped |
 
-**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 25 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, blank env values falling back to defaults, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, an OS-upgrade layer that cannot be refreshed (`OS_REFRESH`), expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, paste-unsafe doc commands, and the project-name validator. A gate that has never been seen failing proves nothing.
+**Proof that the gates can fail.** `mise run negative-controls` breaks each rule on purpose and requires a *named* check to fail, then restores the project and requires the check to pass again. It covers 33 controls: env-file ignore, secret detection (a token committed with `--no-verify`), coverage floor, settings validation, blank env values falling back to defaults, request-ID sanitising, health contract, API docs hidden in prod, lint, types, lockfile drift, dependency audit, image build context, an OS-upgrade layer that cannot be refreshed (`OS_REFRESH`), expired, undocumented and over-90-day scan exceptions, trivy config and `TRIVY_*` environment bypasses, image and action pin policy, an undated pip-audit exception, the ChromaDB/Python 3.15 guard, paste-unsafe doc commands, the project-name validator, Dependabot limited to `uv.lock` and absent when `dependency_updates=false`, root and template hook revs or tags that disagree, a gitleaks hook out of step with `gitleaks_version`, generated Dependabot without `lockfile-only`, the release check (it must pass at the current `template_ref` and refuse a `sha256:PENDING` digest), and two workflow scans (an injectable expression, a tag-pinned action from another owner). A gate that has never been seen failing proves nothing.
 
 ---
 
@@ -275,7 +279,7 @@ Every generated project ships with these gates, and every gate exits non-zero on
                                              publish job: SHA256SUMS → GitHub release
 
                                          .github/workflows/template-ci.yml   (this repo's own CI)
-                                             lint (hooks, actionlint, pins, nothing ignored)
+                                             lint (hooks incl. zizmor, actionlint, pins, nothing ignored)
                                              render matrix: service, library, library-container,
                                                notebooks, service-ai-lancedb, notebooks-ai-chromadb,
                                                service-py314, service-py313 (each runs its own gates,
@@ -361,7 +365,7 @@ REQUIRE_CONTAINER=1 mise run render-test -- service   # include image build, sca
 4. Merge to `main`, then tag the rc: `git tag v2.1.0-rc.1 && git push origin v2.1.0-rc.1`. `release.yml` verifies pins, runs template CI and creates a pre-release.
 5. Update the reference app (`template-repo`) to the rc and check its CI and a test release. Then set `template_ref: v2.1.0`, merge, and tag `v2.1.0`.
 
-There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). Review tool, action and base-image versions monthly and after security advisories.
+**Dependency updates** ([ADR 0013](docs/adr/0013-dependabot-for-actions-hooks-and-python-dependencies.md)). Dependabot opens weekly PRs for this repo's actions (minor and patch grouped) and hooks (one PR per hook), once a release is 7 days old; security updates are not delayed. A hook PR needs one more commit before it passes: copy the new `rev` and `# frozen:` tag into `template/.pre-commit-config.yaml.jinja` (see CONTRIBUTING, *Handling a Dependabot PR*). Dependabot cannot read `copier.yml`, the root `.mise.toml` or `template/`: review monthly, and after security advisories, the tool versions and base-image digests there and the hooks only the template uses (nbstripout, nbQA). Keep Dependabot alerts and security updates switched on in this repo's security settings.
 
 **Dependency floors** in `template/pyproject.toml.jinja` are the latest releases at each template release, and never below a version with a published security fix. Refresh them every release: check PyPI for the latest versions, then prove the old floors' risk is gone with a `--resolution lowest-direct` resolve audited by pip-audit (a floor only matters when something resolves low, so audit the low end). Each Python choice must install from wheels on macOS arm64 and Linux amd64/arm64: `uv pip compile --only-binary :all: --python-version <ver> --python-platform <platform>`.
 
@@ -398,6 +402,8 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 │   ├── workflows/release.yml          releases the template on a version tag
 │   ├── ISSUE_TEMPLATE/                bug, feature and question forms
 │   ├── FUNDING.yml                    the Sponsor button
+│   ├── dependabot.yml                 weekly action and hook updates (ADR 0013)
+│   ├── zizmor.yml                     workflow-scan exceptions, each with its reason (ADR 0014)
 │   └── CODEOWNERS
 ├── scripts/
 │   ├── render.py                 render a variant (outside this repo) and run its gates
@@ -412,6 +418,7 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 ├── workstation/                  once-per-machine set-up (README) + terminal prompt config
 ├── polyglot/                     mise baselines for Node.js and Java/Maven repos
 ├── docs/adr/                     decisions behind this template
+├── docs/delivery/working-memory.md  session decisions kept between maintainer sessions (append-only)
 ├── docs/design-choices.md        Podman, no registry, immutable tags: the why and the cost
 ├── docs/demo/quickstart.tape     re-records the README's quickstart GIF (VHS)
 ├── .mise.toml                    maintainer tools and tasks
@@ -433,12 +440,14 @@ There is no dependency bot ([ADR 0007](docs/adr/0007-supply-chain-pinning.md)). 
 | [0004](docs/adr/0004-copier-single-source-template.md) | One Copier template replaces copy-paste templates |
 | [0005](docs/adr/0005-src-layout-and-dependency-groups.md) | src layout; PEP 735 dependency groups for tooling |
 | [0006](docs/adr/0006-vulnerability-scan-policy.md) | Fail on fixable HIGH/CRITICAL; time-boxed exceptions |
-| [0007](docs/adr/0007-supply-chain-pinning.md) | Pin by digest and SHA; no dependency bot |
+| [0007](docs/adr/0007-supply-chain-pinning.md) | Pin by digest and SHA (its "no dependency bot" clause is superseded by 0013) |
 | [0008](docs/adr/0008-base-image.md) | `python:<ver>-slim`, patched, without pip |
 | [0009](docs/adr/0009-reusable-ci-workflow.md) | Projects call one versioned, reusable workflow |
 | [0010](docs/adr/0010-service-runtime-baseline.md) | Service baseline: factory, health endpoints, request ID, JSON logs, typed settings |
 | [0011](docs/adr/0011-release-artifacts-without-registry.md) | Release OCI archives + SBOM + provenance; no registry |
 | [0012](docs/adr/0012-ai-stack.md) | Optional AI stack: LanceDB (any Python) or ChromaDB (≤3.14), local embeddings, pdfplumber, Tavily |
+| [0013](docs/adr/0013-dependabot-for-actions-hooks-and-python-dependencies.md) | Dependabot for this repo's actions and hooks, and generated projects' Python dependencies |
+| [0014](docs/adr/0014-scan-workflows-with-zizmor.md) | Scan workflows with zizmor (offline, any finding fails) |
 
 ---
 
@@ -455,7 +464,7 @@ v1 was two folders (`template-python-projects/`, `template-jupyterlab-projects/`
 | Actions pinned by tag (`@v4`) | A moved tag runs different code | Commit SHAs, enforced by `check_pins.py` |
 | No release path | No defined artifact | Multi-arch OCI archives, SBOM, provenance on a GitHub release |
 | Service had only a CLI | Health, request tracing, logging and config added ad hoc per project | `create_app()`, `/health/live`, `/health/ready`, request ID, JSON logs, fail-fast settings |
-| Gates assumed to work | Nothing proved a gate could fail | 25 negative controls in template CI |
+| Gates assumed to work | Nothing proved a gate could fail | Negative controls in template CI (`mise run negative-controls`) |
 | Docker files in `.docker/` | Team moved to Podman | `.container/Containerfile` + `compose.yaml`, Podman only (ADR 0003) |
 | `.mise-node.toml`, `.mise-java-maven.toml` inside the Python templates | Not Python; `format` used `\|\| true` | Moved to `polyglot/`; Node 26 LTS (no Corepack: Node 25+ dropped it), Java 25 LTS; no masked failures |
 | Workstation set-up repeated in each template README | Two copies drifting; stale `openssl readline` build deps | One [`workstation/README.md`](workstation/README.md) |

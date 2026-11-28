@@ -51,6 +51,23 @@ def edit(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new))
 
 
+def append(path: Path, text: str) -> None:
+    path.write_text(path.read_text() + text)
+
+
+def template_bot(p: Path) -> Path:
+    return next((p / "template/.github").glob("*dependabot.yml*.jinja"))
+
+
+UNSAFE_JOB = """
+  unsafe:
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - run: echo "${{ github.event.pull_request.title }}"
+"""
+
+
 def fake_token() -> str:
     # Built at run time so no secret-shaped literal is ever committed to this repo.
     return "ghp_" + "".join(random.choices(string.ascii_letters + string.digits, k=36))
@@ -282,6 +299,95 @@ CONTROLS = [
         lambda p: edit(p / "copier.yml", "{% elif '\"' in project_name", "{% elif false and '\"' in project_name"),
         marker="",
         where="template",
+    ),
+    Control(
+        "hook-rev-agreement",
+        "a hook bumped in the root config only (as Dependabot does) fails until the template copy matches",
+        "python3 scripts/check_pins.py --root .",
+        lambda p: (p / ".pre-commit-config.yaml").write_text(
+            re.sub(
+                r"(astral-sh/ruff-pre-commit\n\s+rev: )[0-9a-f]{40}",
+                r"\g<1>" + "0" * 40,
+                (p / ".pre-commit-config.yaml").read_text(),
+            )
+        ),
+        marker="differs from the template",
+        where="template",
+    ),
+    Control(
+        "dependabot-uv-only",
+        "generated projects' Dependabot may update uv.lock only; template-owned pins come with copier update",
+        "python3 scripts/check_pins.py --root .",
+        lambda p: template_bot(p).write_text(
+            template_bot(p).read_text()
+            + "  - package-ecosystem: github-actions\n    directory: /\n    schedule:\n      interval: weekly\n"
+        ),
+        marker="only the uv ecosystem",
+        where="template",
+    ),
+    Control(
+        "dependabot-lockfile-only",
+        "generated projects' Dependabot must leave the template-owned pyproject.toml floors alone",
+        "python3 scripts/check_pins.py --root .",
+        lambda p: edit(template_bot(p), "    versioning-strategy: lockfile-only\n", ""),
+        marker="lockfile-only",
+        where="template",
+    ),
+    Control(
+        "gitleaks-version-agreement",
+        "the gitleaks hook and copier.yml's gitleaks_version must name the same release",
+        "python3 scripts/check_pins.py --root .",
+        lambda p: edit(
+            p / "copier.yml",
+            "gitleaks_version:\n  type: str\n  default: "
+            + re.search(r"gitleaks_version:\n  type: str\n  default: (\S+)", (p / "copier.yml").read_text()).group(1),
+            "gitleaks_version:\n  type: str\n  default: 0.0.1",
+        ),
+        marker="gitleaks hook frozen tag",
+        where="template",
+    ),
+    Control(
+        "release-gate",
+        "the release check passes at the current template_ref and refuses a sha256:PENDING digest",
+        "python3 scripts/check_pins.py --root . --release"
+        " --tag \"$(sed -n '/^template_ref:/,/^  default:/s/^  default: //p' copier.yml)\"",
+        lambda p: (p / "copier.yml").write_text(
+            re.sub(
+                r"^(uv_image_digest:\n  type: str\n  default: )sha256:[0-9a-f]{64}$",
+                r"\g<1>sha256:PENDING",
+                (p / "copier.yml").read_text(),
+                count=1,
+                flags=re.MULTILINE,
+            )
+        ),
+        marker="sha256:PENDING digests",
+        where="template",
+    ),
+    Control(
+        "dependency-updates-off",
+        "dependency_updates=false renders no Dependabot config",
+        'python3 scripts/render.py service-py313 --no-gates --out "$(mktemp -d)/x"',
+        lambda p: template_bot(p).rename(template_bot(p).with_name("dependabot.yml.jinja")),
+        marker="rendered although dependency_updates is false",
+        where="template",
+    ),
+    Control(
+        "workflow-scan",
+        "an attacker-controllable expression in a workflow `run:` fails the zizmor hook",
+        "uv run pre-commit run zizmor --all-files",
+        lambda p: append(p / ".github/workflows/ci.yml", UNSAFE_JOB),
+        marker="template-injection",
+    ),
+    Control(
+        "workflow-scan-pin-scope",
+        "only the template's own shared workflows may be called by tag; any other owner's must be SHA-pinned",
+        "uv run pre-commit run zizmor --all-files",
+        lambda p: edit(
+            p / ".github/workflows/ci.yml",
+            "uses: lloydbrian/python-project-template/",
+            "uses: someone-else/python-project-template/",
+        ),
+        marker="unpinned-uses",
     ),
 ]
 

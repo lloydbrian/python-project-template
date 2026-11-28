@@ -1,0 +1,7 @@
+# zizmor configuration for this repo (ADR 0014). Every exception names its reason.
+rules:
+  self-repository:
+    ignore:
+      # release.yml calls template-ci.yml with `uses: ./...`; the `$/` syntax zizmor suggests
+      # is not adopted until GitHub documents it for reusable-workflow calls.
+      - release.yml

@@ -28,6 +28,11 @@ repos:
     hooks:
       - id: gitleaks                    # blocks commits containing secrets (staged changes);
                                         # `mise run ci` also scans the full git history
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: c7d31dc612dffdd4d3b2f2b88b9660d3ab057ee8  # frozen: v1.33.1
+    hooks:
+      - id: zizmor                      # workflow security audits; exceptions in .github/zizmor.yml
+        args: [--no-progress, --offline]
 {%- if project_type == "notebooks" %}
   - repo: https://github.com/kynan/nbstripout
     rev: 512fa4ac6e4674f3a748e7dd5a546c037ec39edf  # frozen: 0.9.2

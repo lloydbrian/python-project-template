@@ -1,0 +1,9 @@
+# zizmor configuration (workflow security audits, run by pre-commit). Every exception names its reason.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # The shared workflows are called by release tag: copier renders it, and the template's
+        # tag ruleset means a tag never moves. Every other `uses:` must be pinned by commit SHA.
+        {{ github_owner }}/python-project-template/*: ref-pin
+        "*": hash-pin

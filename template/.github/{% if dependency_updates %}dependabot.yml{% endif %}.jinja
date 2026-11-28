@@ -1,0 +1,22 @@
+# Dependabot: weekly PRs that update this project's Python dependencies in uv.lock only.
+# Everything the template owns (the dependency floors in pyproject.toml, the shared CI workflow tag,
+# pre-commit hooks, base-image digests, tool versions) arrives with `copier update`, tested together;
+# lockfile-only keeps Dependabot away from pyproject.toml, so the two never conflict.
+# A 7-day cooldown keeps brand-new releases out of PRs; security updates are not delayed.
+# Dependabot alerts and security updates are repository settings: switch both on (see README).
+# To turn this file off, see the README (Dependencies).
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /
+    versioning-strategy: lockfile-only
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore
+      include: scope

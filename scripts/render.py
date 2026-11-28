@@ -52,6 +52,7 @@ VARIANTS: dict[str, dict[str, object]] = {
         "project_name": "Ref Service 313",
         "project_type": "service",
         "python_version": "3.13",
+        "dependency_updates": False,  # proves the opt-out renders no Dependabot config
     },
 }
 
@@ -63,6 +64,7 @@ ALWAYS = [
     ".mise.toml",
     ".pre-commit-config.yaml",
     ".github/workflows/ci.yml",
+    ".github/zizmor.yml",
     ".vscode/settings.json",
     "pyproject.toml",
     "README.md",
@@ -105,6 +107,9 @@ def check_tree(variant: str, data: dict[str, object], out: Path) -> None:
     expected = list(ALWAYS) + (CONTAINER if has_container else [])
     if data.get("license", "Proprietary") != "Proprietary":
         expected.append("LICENSE")
+    bot_on = bool(data.get("dependency_updates", True))
+    if bot_on:
+        expected.append(".github/dependabot.yml")
     if ptype != "library" and has_container:
         expected.append(".container/compose.yaml")
     if ptype == "notebooks":
@@ -117,6 +122,7 @@ def check_tree(variant: str, data: dict[str, object], out: Path) -> None:
         expected.append(".pip-audit-ignore")
     missing = [f for f in expected if not (out / f).is_file()]
     unexpected = [f for f in CONTAINER if not has_container and (out / f).exists()]
+    stray_bot = not bot_on and (out / ".github/dependabot.yml").exists()
     leftovers = []
     for path in out.rglob("*"):
         if path.is_file() and ".git" not in path.parts:
@@ -131,6 +137,8 @@ def check_tree(variant: str, data: dict[str, object], out: Path) -> None:
         problems.append(f"missing files: {missing}")
     if unexpected:
         problems.append(f"container files in a non-container variant: {unexpected}")
+    if stray_bot:
+        problems.append(".github/dependabot.yml rendered although dependency_updates is false")
     if leftovers:
         problems.append(f"unrendered template syntax: {leftovers}")
     if "_commit:" not in answers or "_src_path:" not in answers:
