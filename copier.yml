@@ -122,6 +122,11 @@ license:
     - Apache-2.0
   default: Proprietary
 
+dependency_updates:
+  type: bool
+  help: "Add Dependabot for this project's Python dependencies (uv.lock)? Weekly PRs, minor and patch grouped; template-owned pins arrive with copier update"
+  default: true
+
 http_port:
   type: int
   help: "HTTP port the service listens on (1024 or higher: rootless Podman cannot bind lower ports)"
@@ -154,7 +159,7 @@ kernel_display_name:
 # ---------------------------------------------------------------------------
 template_ref:
   type: str
-  default: v2.0.1
+  default: v2.1.0-rc.1
   when: false
 
 has_container:

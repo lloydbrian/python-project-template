@@ -1,0 +1,29 @@
+# Dependabot for this repo (ADR 0013): GitHub Actions in .github/workflows (including the shared
+# python-ci.yml and python-release.yml) and the hooks in the root .pre-commit-config.yaml.
+# Dependabot cannot read template/ (Jinja). When it bumps a hook, copy the new rev into
+# template/.pre-commit-config.yaml.jinja on the same branch: check_pins.py fails until you do.
+# A 7-day cooldown keeps brand-new releases out of PRs; security updates are not delayed.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci
+      include: scope
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    # Not grouped: grouped updates of frozen SHAs are unreliable (dependabot-core #15266).
+    commit-message:
+      prefix: chore
+      include: scope

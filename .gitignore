@@ -312,3 +312,6 @@ Claude outputs/
 
 # --- Deliverables downloaded from Claude (patches, checksums, handoff notes) ---
 /claude-ai-downloads/
+
+# --- Personal session state (docs/delivery/working-memory.md is shared and tracked) ---
+/docs/delivery/session-state.md

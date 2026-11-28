@@ -40,6 +40,14 @@ Not sure where to start? Open a question with the issue form and say what you wo
 - **No secrets, real hostnames or account IDs** in the template, tests, docs or commit messages. Use placeholders such as `SOME_API_KEY` and `example.invalid`.
 - **Gates must be able to fail.** Never add `|| true` to a gate.
 
+## Handling a Dependabot PR
+
+Dependabot ([ADR 0013](docs/adr/0013-dependabot-for-actions-hooks-and-python-dependencies.md)) updates this repo's workflows and its root `.pre-commit-config.yaml`. It cannot read `template/`, so:
+
+- **Action PRs** (`ci(deps): ...`): review the release notes, let CI run, merge. Generated projects receive the new actions with the next template release.
+- **Hook PRs** (`chore(deps): ...`) fail the lint job until the template copy matches (`check_pins.py`: "differs from the template's"). On the PR branch, copy the new `rev` and `# frozen:` tag into `template/.pre-commit-config.yaml.jinja`, run `mise run template-ci`, and push. For a gitleaks bump, also raise `gitleaks_version` in `copier.yml` and the root `.mise.toml` in the same PR, so the hook and the full-history scan run the same version (`mise run pins` fails until they agree).
+- **A zizmor bump** can add an audit that fails CI. Fix the finding in the same PR, or add an exception with its reason to `.github/zizmor.yml` (this repo) or `template/.github/zizmor.yml.jinja` (generated projects).
+
 ## Commit messages
 
 [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `refactor:`, `test:`. A breaking change for generated projects (a removed question, a renamed file) uses `feat!:` and a **Breaking** note in the changelog with the migration step.
